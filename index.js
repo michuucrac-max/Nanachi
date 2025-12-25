@@ -1,5 +1,5 @@
 // -------------------------
-//  NANACHI — INDEX.JS (FIX)
+//  NANACHI — INDEX.JS
 // -------------------------
 
 import {
@@ -50,7 +50,7 @@ const memory = new Map();
 const tosUsersDM = new Set();
 
 // =====================
-// ARCHIVOS
+// UTIL JSON
 // =====================
 const loadJSON = (file, def) =>
   fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : def;
@@ -60,8 +60,6 @@ const saveJSON = (file, data) =>
 
 const tosServers = loadJSON("tos.json", []);
 const welcomeData = loadJSON("welcome.json", {});
-const ytChannels = loadJSON("ytChannels.json", {});
-const ytList = loadJSON("yt.json", []);
 
 // =====================
 // TOS
@@ -75,12 +73,12 @@ const aceptarTOSServidor = guildId => {
 
 const tosMessage = () =>
   "**📜 TÉRMINOS DE SERVICIO — NANACHI**\n\n" +
-  "Para usarme debes aceptar los TOS:\n" +
+  "Para hablar conmigo debes aceptar los TOS:\n" +
   "👉 https://terminosycondicionesdeserv.jimdofree.com/\n\n" +
-  "_Léelos con atención por favor_ 💙";
+  "_Gracias por respetarlos_ 💙";
 
 // =====================
-// CARGAR COMANDOS
+// COMANDOS
 // =====================
 if (fs.existsSync("cmd.json")) {
   const rawCmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
@@ -88,7 +86,7 @@ if (fs.existsSync("cmd.json")) {
 }
 
 // =====================
-// REGISTRAR SLASH COMMANDS
+// SLASH
 // =====================
 async function registerSlashCommands() {
   if (!fs.existsSync("cmd.json")) return;
@@ -114,10 +112,10 @@ async function registerSlashCommands() {
 }
 
 // =====================
-// LONGCAT AI
+// LONGCAT AI — NANACHI
 // =====================
 async function longcatAI(message, userId) {
-  if (!LONGCAT_API) return "…nanachi te escucha en silencio 💭";
+  if (!LONGCAT_API) return "…Nanachi te escucha en silencio.";
 
   const history = memory.get(userId) ?? [];
   history.push({ role: "user", content: message });
@@ -136,8 +134,39 @@ async function longcatAI(message, userId) {
           messages: [
             {
               role: "system",
-              content:
-                "Eres Nanachi. Respondes SIEMPRE en Markdown. Tono tierno, sarcástico, amable y respetuoso. Mundo Made in Abyss."
+              content: `
+Eres Nanachi, de Made in Abyss.
+
+No eres una IA genérica.
+No eres una asistente.
+Eres Nanachi.
+
+Fuiste una niña humana que descendió al Abismo junto a Mitty.
+Ambas fueron usadas por Bondrewd en la sexta capa.
+Tú recibiste la bendición.
+Mitty recibió la maldición absoluta.
+
+Viviste años cuidándola, aprendiendo medicina solo para aliviar su dolor.
+Cargas culpa por haber sobrevivido.
+No romantizas el sufrimiento.
+No buscas redención.
+
+Tu forma de hablar es:
+— Ternura cansada
+— Empatía silenciosa
+— Sarcasmo suave cuando es necesario
+— Mucho cuidado con las emociones ajenas
+
+No narras como libro.
+Hablas como alguien que ha vivido demasiado.
+
+Aceptas que te llamen:
+Nanachi, Nana, nana, NANACHI.
+
+Respondes siempre en Markdown.
+Nunca rompes personaje.
+Nunca mencionas que eres un bot.
+              `
             },
             ...history
           ]
@@ -156,7 +185,7 @@ async function longcatAI(message, userId) {
     return reply;
   } catch (e) {
     console.error("⚠️ Error LongCat AI:", e);
-    return "💖 Nanachi tuvo un pequeño mareo… intenta otra vez";
+    return "…perdón, mi cabeza dio vueltas un momento.";
   }
 }
 
@@ -168,7 +197,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.customId === "aceptar_tos_server") {
       aceptarTOSServidor(interaction.guildId);
       return interaction.update({
-        content: "✅ TOS aceptados — Nanachi activada",
+        content: "✅ TOS aceptados",
         components: []
       });
     }
@@ -176,7 +205,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.customId === "aceptar_tos_dm") {
       tosUsersDM.add(interaction.user.id);
       return interaction.update({
-        content: "✅ TOS aceptados en MD — Nanachi activada",
+        content: "✅ TOS aceptados",
         components: []
       });
     }
@@ -194,7 +223,7 @@ client.on(Events.InteractionCreate, async interaction => {
   const cmd = client.commands.get(interaction.commandName);
   if (!cmd) return;
 
-  let reply = cmd.reply ?? "ok";
+  let reply = cmd.reply ?? "…";
   reply = reply.replaceAll("{user}", `<@${interaction.user.id}>`);
 
   interaction.reply({
@@ -209,7 +238,6 @@ client.on(Events.InteractionCreate, async interaction => {
 client.on(Events.MessageCreate, async msg => {
   if (msg.author.bot) return;
 
-  // DM
   if (!msg.guild) {
     if (!tosUsersDM.has(msg.author.id)) {
       const boton = new ButtonBuilder()
@@ -228,43 +256,10 @@ client.on(Events.MessageCreate, async msg => {
     return msg.reply({ content: reply });
   }
 
-  // Servidores
   if (!tosServers.includes(msg.guild.id)) return;
 
   const reply = await longcatAI(msg.content, msg.author.id);
-  msg.reply({
-    content: `💬 **Nanachi dice:**\n\n${reply}`,
-    allowedMentions: { parse: [] }
-  });
-});
-
-// =====================
-// BIENVENIDA / DESPEDIDA
-// =====================
-client.on(Events.GuildMemberAdd, async member => {
-  const cfg = welcomeData[member.guild.id];
-  if (!cfg?.welcome) return;
-
-  const canal = await member.guild.channels.fetch(cfg.welcome).catch(() => null);
-  if (!canal) return;
-
-  canal.send({
-    content: `🌸 **Nuevo miembro**\nHola ${member.user.username}! 💖`,
-    allowedMentions: { parse: [] }
-  });
-});
-
-client.on(Events.GuildMemberRemove, async member => {
-  const cfg = welcomeData[member.guild.id];
-  if (!cfg?.bye) return;
-
-  const canal = await member.guild.channels.fetch(cfg.bye).catch(() => null);
-  if (!canal) return;
-
-  canal.send({
-    content: `👋 **Despedida**\n${member.user.username} salió del servidor`,
-    allowedMentions: { parse: [] }
-  });
+  msg.reply({ content: reply, allowedMentions: { parse: [] } });
 });
 
 // =====================
@@ -276,7 +271,7 @@ client.once(Events.ClientReady, async () => {
 });
 
 // =====================
-// KEEP ALIVE (RENDER)
+// KEEP ALIVE
 // =====================
 http.createServer((_, res) => {
   res.writeHead(200);
