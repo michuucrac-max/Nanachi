@@ -114,68 +114,25 @@
   {
     "name": "nanahi",
     "description": "Saludo 👋",
-    "reply": "✨ Hola {target}, {user} te saluda con cariño"
+    "reply": "✨ Hola~ {user} te saluda con cariño 💖"
   },
   {
     "name": "nanabye",
-    "description": "despedida",
-    "reply": "🌙 {user} se despide de {target}~ Cuídate 💕"
+    "description": "Despedida 🌙",
+    "reply": "🌙 {user} se despide~ Cuídate 💕"
   },
   {
     "name": "nanatos",
     "description": "Ver los Términos de Servicio 📜",
-    "reply": "{user}📜 Puedes leer mis TOS aquí:\nhttps://terminosycondicionesdeserv.jimdofree.com/"
+    "reply": "📜 Puedes leer mis TOS aquí:\nhttps://terminosycondicionesdeserv.jimdofree.com/"
   },
+
   {
-    "name": "nanasetwelcome",
-    "description": "Configura los canales de bienvenida y despedida 🌸",
+    "name": "nanalovecalculator",
+    "description": "Calcula el amor entre dos personas 💘",
     "options": [
-      {
-        "type": 7,
-        "name": "welcome",
-        "description": "Canal de bienvenida",
-        "required": true
-      },
-      {
-        "type": 7,
-        "name": "bye",
-        "description": "Canal de despedida",
-        "required": true
-      }
+      { "type": 6, "name": "target", "description": "Persona especial", "required": true }
     ],
-    "reply": " enhorabuena, configuraste los canales** 💖\n daré la bienvenida y despedida en los canales seleccionados~"
-  },
-  {
-    "name": "nanaaddyt",
-    "description": "Agrega este canal para avisos de YouTubers 📺",
-    "reply": "📺 marqué este canal para avisos de YouTube~ "
-  },
-  {
-    "name": "nanasecreto",
-    "description": "🤫 Un comando secreto de nanachi",
-    "reply": "🤫 Shhh~ nanachi guarda este secreto para más adelante"
-  },
-  {
-    "name": "nanamod",
-    "description": "Herramientas de moderación 🛡️",
-    "reply": "🛡️ muy pronto~ 🐾"
-  },
-  {
-    "name": "nanaplayers",
-    "description": "Muestra información sobre jugadores 🎮",
-    "reply": "muy pronto"
-  },
-  {
-    "name": "nanaping",
-    "description": "Muestra el estado y latencia de nanachi 📊",
-    "reply": "pong, jajaja, estoy a un 90%"
-  },
-    {
-    "name": "nanaadopt",
-    "description": "adopta a alguien ^^ 🐾",
-    "options": [
-      { "type": 6, "name": "target", "description": "Usuario a acariciar", "required": true }
-    ],
-    "reply": "{user} ah adoptado a {target}~ ^^~ 🐾💞"
-    }
+    "reply": "💘 **Compatibilidad amorosa** 💘\n{user} ❤️ {target}\nResultado: **{random}%**\nNanachi dice: {loveMessage}"
+  }
 ]
