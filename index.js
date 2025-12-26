@@ -95,7 +95,25 @@ const tosMessage = () =>
   "Para hablar conmigo debes aceptar los TOS:\n" +
   "👉 https://terminosycondicionesdeserv.jimdofree.com/\n\n" +
   "Gracias por respetarlos 💙";
+// =====================
+// ESTADOS ALEATORIOS
+// =====================
+const estados = loadJSON("estados.json", []); // Asegúrate de tener tu estados.json en la misma carpeta
 
+if (estados.length > 0) {
+  setInterval(async () => {
+    if (!client.user) return;
+    const randomIndex = Math.floor(Math.random() * estados.length);
+    const newState = estados[randomIndex];
+
+    try {
+      await client.user.setActivity(newState, { type: "PLAYING" });
+      console.log(`🎭 Estado de Nanachi actualizado: ${newState}`);
+    } catch (e) {
+      console.error("⚠️ Error al cambiar estado:", e);
+    }
+  }, 1000 * 60 * 2); // Cada 2 minutos
+}
 // =====================
 // COMANDOS
 // =====================
