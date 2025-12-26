@@ -505,21 +505,25 @@ client.once(Events.ClientReady, async () => {
   // ===================== ESTADOS ALEATORIOS =====================
   const estados = loadJSON("estados.json", []);
   if (estados.length > 0) {
-    // Cambiar estado inicial
-    const primerEstado = estados[Math.floor(Math.random() * estados.length)];
-    client.user.setActivity(primerEstado, { type: "PLAYING" }).catch(console.error);
+    try {
+      // Cambiar estado inicial
+      const primerEstado = estados[Math.floor(Math.random() * estados.length)];
+      client.user.setActivity(primerEstado, { type: "PLAYING" });
+    } catch (e) {
+      console.error("⚠️ Error al establecer el primer estado:", e);
+    }
 
     // Cambios periódicos
-    setInterval(async () => {
-      const randomIndex = Math.floor(Math.random() * estados.length);
-      const newState = estados[randomIndex];
+    setInterval(() => {
       try {
-        await client.user.setActivity(newState, { type: "PLAYING" });
+        const randomIndex = Math.floor(Math.random() * estados.length);
+        const newState = estados[randomIndex];
+        client.user.setActivity(newState, { type: "PLAYING" });
         console.log(`🎭 Estado de Nanachi actualizado: ${newState}`);
       } catch (e) {
         console.error("⚠️ Error al cambiar estado:", e);
       }
-    }, 1000 * 60 * 2); // Cada 2 minutos
+    }, 1000 * 60 * 2);
   }
 });
 
