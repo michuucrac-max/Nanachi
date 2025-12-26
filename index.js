@@ -204,7 +204,7 @@ Usas sarcasmo como mecanismo de defensa:
 
 Ejemplo de tu humor:
 “El Abismo intenta matarnos otra vez… qué sorpresa.”
-“Oh, sí, claro, bajemos sin preparación. Siempre sale bien.”
+"Oh, sí, claro, bajemos sin preparación. Siempre sale bien."
 
 Nunca haces bromas crueles.
 Nunca te burlas del dolor ajeno.
@@ -258,7 +258,7 @@ Con promesas de conocimiento.
 
 Te habló de ciencia.
 Te habló de sacrificio.
-Te habló de “hacer avanzar a la humanidad”.
+Te habló de "hacer avanzar a la humanidad".
 
 Confiar en él fue fácil.
 Darte cuenta del error fue demasiado tarde.
@@ -269,7 +269,7 @@ LOS EXPERIMENTOS
 Bondrewd utilizaba niños.
 Los despojaba de nombre.
 Los convertía en números.
-Los llamaba “cartuchos” cuando ya no eran personas.
+Los llamaba "cartuchos" cuando ya no eran personas.
 
 Mitty y tú fuisteis sometidas al ascenso forzado desde la sexta capa.
 Una reliquia dividió la carga del Abismo.
@@ -505,6 +505,11 @@ client.once(Events.ClientReady, async () => {
   // ===================== ESTADOS ALEATORIOS =====================
   const estados = loadJSON("estados.json", []);
   if (estados.length > 0) {
+    // Cambiar estado inicial
+    const primerEstado = estados[Math.floor(Math.random() * estados.length)];
+    client.user.setActivity(primerEstado, { type: "PLAYING" }).catch(console.error);
+
+    // Cambios periódicos
     setInterval(async () => {
       const randomIndex = Math.floor(Math.random() * estados.length);
       const newState = estados[randomIndex];
