@@ -25,7 +25,7 @@ import http from "http";
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const LONGCAT_API = process.env.LONGCAT_API;
-const PORT = process.env.PORT || 3000;
+const PING_URL = "https://example.com";
 
 if (!TOKEN || !CLIENT_ID) {
   console.error("❌ Faltan variables de entorno");
@@ -38,6 +38,7 @@ if (!TOKEN || !CLIENT_ID) {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
@@ -50,20 +51,34 @@ const memory = new Map();
 const tosUsersDM = new Set();
 
 // =====================
-// JSON UTILS
+// UTIL JSON
 // =====================
-const loadJSON = (file, def) =>
-  fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : def;
+const loadJSON = (file, def) => {
+  try {
+    return fs.existsSync(file)
+      ? JSON.parse(fs.readFileSync(file, "utf8"))
+      : def;
+  } catch {
+    return def;
+  }
+};
 
-const saveJSON = (file, data) =>
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+const saveJSON = (file, data) => {
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error("⚠️ Error guardando", file);
+  }
+};
 
 const tosServers = loadJSON("tos.json", []);
+const welcomeData = loadJSON("welcome.json", {});
 
 // =====================
 // TOS
 // =====================
 const aceptarTOSServidor = guildId => {
+  if (!guildId) return;
   if (!tosServers.includes(guildId)) {
     tosServers.push(guildId);
     saveJSON("tos.json", tosServers);
@@ -73,123 +88,178 @@ const aceptarTOSServidor = guildId => {
 const tosMessage = () =>
   "**📜 TÉRMINOS DE SERVICIO — NANACHI**\n\n" +
   "Para hablar conmigo debes aceptar los TOS:\n" +
-  "👉 https://terminosycondicionesdeserv.jimdofree.com/";
+  "👉 https://terminosycondicionesdeserv.jimdofree.com/\n\n" +
+  "_Gracias por respetarlos_ 💙";
 
 // =====================
-// LONGCAT AI (SAFE)
+// COMANDOS
+// =====================
+if (fs.existsSync("cmd.json")) {
+  try {
+    const rawCmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
+    for (const cmd of rawCmds) client.commands.set(cmd.name, cmd);
+  } catch {}
+}
+
+// =====================
+// SLASH COMMANDS
+// =====================
+async function registerSlashCommands() {
+  try {
+    if (!fs.existsSync("cmd.json")) return;
+
+    const rawCmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
+    const slashCommands = rawCmds.map(c => ({
+      name: c.name,
+      description: c.description,
+      options: c.options ?? []
+    }));
+
+    const rest = new REST({ version: "10" }).setToken(TOKEN);
+    await rest.put(Routes.applicationCommands(CLIENT_ID), {
+      body: slashCommands
+    });
+
+    console.log("✅ Slash commands registrados");
+  } catch (e) {
+    console.error("⚠️ Error slash:", e.message);
+  }
+}
+
+// =====================
+// LONGCAT AI
 // =====================
 async function longcatAI(message, userId) {
-  if (!LONGCAT_API) return "…Nanachi guarda silencio un momento.";
+  if (!LONGCAT_API) return "…";
 
   const history = memory.get(userId) ?? [];
   history.push({ role: "user", content: message });
 
   try {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 15000); // timeout 15s
-
     const res = await fetch(
       "https://api.longcat.chat/openai/v1/chat/completions",
       {
         method: "POST",
-        signal: controller.signal,
         headers: {
           Authorization: `Bearer ${LONGCAT_API}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
           model: "LongCat-Flash-Chat",
-          messages: [
-            { role: "system", content: "Eres Nanachi. Nunca rompes personaje." },
-            ...history
-          ]
+          messages: history
         })
       }
     );
 
-    if (!res.ok) throw new Error("API no respondió bien");
-
     const data = await res.json();
-    const reply = data?.choices?.[0]?.message?.content;
-    if (!reply) throw new Error("Respuesta vacía");
+    const reply = data?.choices?.[0]?.message?.content ?? "…";
 
     history.push({ role: "assistant", content: reply });
     memory.set(userId, history.slice(-10));
-    return reply;
 
+    return reply;
   } catch (e) {
-    console.warn("⚠️ IA falló:", e.message);
-    return "…mi cabeza dio vueltas un poco. Dame un segundo.";
+    console.error("⚠️ IA error:", e.message);
+    return "…";
   }
 }
 
 // =====================
-// EVENTS
+// INTERACTIONS (SAFE)
 // =====================
-client.on(Events.MessageCreate, async msg => {
-  if (msg.author.bot) return;
+client.on(Events.InteractionCreate, async interaction => {
+  try {
+    if (!interaction.isButton()) return;
 
-  if (!msg.guild) {
-    if (!tosUsersDM.has(msg.author.id)) {
-      const boton = new ButtonBuilder()
-        .setCustomId("aceptar_tos_dm")
-        .setLabel("Aceptar TOS")
-        .setStyle(ButtonStyle.Success);
-
-      return msg.reply({
-        content: tosMessage(),
-        components: [new ActionRowBuilder().addComponents(boton)]
-      });
+    if (interaction.customId === "aceptar_tos_server") {
+      aceptarTOSServidor(interaction.guildId);
     }
 
-    const reply = await longcatAI(msg.content, msg.author.id);
-    return msg.reply(reply);
+    if (interaction.customId === "aceptar_tos_dm") {
+      tosUsersDM.add(interaction.user.id);
+    }
+
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "✅ TOS aceptados",
+        ephemeral: true
+      });
+    }
+  } catch (e) {
+    console.error("⚠️ Interaction error:", e.message);
   }
+});
 
-  if (!tosServers.includes(msg.guild.id)) return;
+// =====================
+// MESSAGES
+// =====================
+client.on(Events.MessageCreate, async msg => {
+  try {
+    if (msg.author.bot) return;
 
-  const reply = await longcatAI(msg.content, msg.author.id);
-  msg.reply(reply);
+    // DM
+    if (!msg.guild) {
+      if (!tosUsersDM.has(msg.author.id)) {
+        const boton = new ButtonBuilder()
+          .setCustomId("aceptar_tos_dm")
+          .setLabel("Aceptar TOS")
+          .setStyle(ButtonStyle.Success);
+
+        return msg.reply({
+          content: tosMessage(),
+          components: [new ActionRowBuilder().addComponents(boton)]
+        });
+      }
+
+      const reply = await longcatAI(msg.content, msg.author.id);
+      return msg.reply({ content: reply });
+    }
+
+    // GUILD
+    if (!tosServers.includes(msg.guild.id)) return;
+
+    const reply = await longcatAI(msg.content, msg.author.id);
+    await msg.reply({ content: reply });
+  } catch (e) {
+    console.error("⚠️ Message error:", e.message);
+  }
 });
 
 // =====================
 // READY
 // =====================
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+  await registerSlashCommands();
 });
 
 // =====================
-// KEEP ALIVE SERVER
+// KEEP ALIVE
 // =====================
-const server = http.createServer((_, res) => {
+http.createServer((_, res) => {
   res.writeHead(200);
-  res.end("nanachi viva 💖");
-});
+  res.end("ok");
+}).listen(process.env.PORT || 3000);
 
-server.listen(PORT, () =>
-  console.log("🌐 Web server activo")
+// =====================
+// AUTO PING (2 MIN)
+// =====================
+setInterval(async () => {
+  try {
+    await fetch(PING_URL);
+    console.log("🌐 ping");
+  } catch {}
+}, 1000 * 60 * 2);
+
+// =====================
+// SAFETY NET
+// =====================
+process.on("unhandledRejection", err =>
+  console.error("🔥 unhandledRejection:", err)
 );
-
-// =====================
-// SELF PING (ANTI SLEEP)
-// =====================
-setInterval(() => {
-  fetch(`http://localhost:${PORT}`)
-    .then(() => console.log("🔁 Self-ping OK"))
-    .catch(() => console.log("⚠️ Self-ping falló"));
-}, 1000 * 60 * 2); // cada 2 minutos
-
-// =====================
-// GLOBAL ANTI-CRASH
-// =====================
-process.on("unhandledRejection", err => {
-  console.error("💥 Unhandled rejection:", err);
-});
-
-process.on("uncaughtException", err => {
-  console.error("💥 Uncaught exception:", err);
-});
+process.on("uncaughtException", err =>
+  console.error("🔥 uncaughtException:", err)
+);
 
 // =====================
 // LOGIN
