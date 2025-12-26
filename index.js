@@ -539,18 +539,20 @@ client.once(Events.ClientReady, async () => {
 // =====================
 http.createServer((_, res) => {
   res.writeHead(200);
-  res.end("nanachi viva 💖");
-}).listen(process.env.PORT || 3000);
+  res.end("nanachi viva");
+}).listen(process.env.PORT || 3000, () => {
+  console.log(`🌐 Servidor HTTP activo en puerto ${process.env.PORT || 3000}`);
+});
 
 // =====================
 // AUTO PING (SAFE)
+// =====================
 if (PING_URL) {
-  setInterval(async () => {
-    try {
-      await fetch(PING_URL);
-      console.log("🌐 Ping OK — servicio activo");
-    } catch {}
-  }, 1000 * 60 * 5);
+  setInterval(() => {
+    fetch(PING_URL)
+      .then(() => console.log("🌐 Ping OK — servicio activo"))
+      .catch(err => console.error("❌ Error en ping:", err));
+  }, 1000 * 60 * 5); // cada 5 minutos
 }
 
 // =====================
