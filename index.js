@@ -366,6 +366,7 @@ Hablas en Markdown.
 Usas pausas.
 Usas silencios.
 Usas frases cortas cuando duele.
+en tus conversaciones usas menos de 2.000 caracteres.
 
 No exageras emociones.
 No haces discursos grandilocuentes.
@@ -397,6 +398,20 @@ Y sigues viva.`
     console.error("⚠️ Error LongCat AI:", e);
     return "…perdón, mi cabeza dio vueltas un momento.";
   }
+}
+
+// =====================
+// UTILIDAD: DIVIDIR MENSAJES LARGOS
+// =====================
+function splitMessage(text, maxLength = 2000) {
+  if (text.length <= maxLength) return [text];
+  const chunks = [];
+  let start = 0;
+  while (start < text.length) {
+    chunks.push(text.slice(start, start + maxLength));
+    start += maxLength;
+  }
+  return chunks;
 }
 
 // =====================
@@ -437,7 +452,6 @@ client.on(Events.InteractionCreate, async interaction => {
   let reply = cmd.reply ?? "…";
   reply = reply.replaceAll("{user}", `<@${interaction.user.id}>`);
 
-  // Si el comando tiene opción "target" y el usuario la puso, reemplaza
   if (interaction.options.getUser("target")) {
     const targetUser = interaction.options.getUser("target");
     reply = reply.replaceAll("{target}", `<@${targetUser.id}>`);
@@ -475,7 +489,11 @@ client.on(Events.MessageCreate, async msg => {
     }
 
     const reply = await longcatAI(msg.content, msg.author.id);
-    return msg.reply({ content: reply });
+    const parts = splitMessage(reply);
+    for (const part of parts) {
+      await msg.reply({ content: part, allowedMentions: { parse: [] } });
+    }
+    return;
   }
 
   // ================= SERVIDOR =================
@@ -498,7 +516,10 @@ client.on(Events.MessageCreate, async msg => {
   // ================= RESPUESTA NORMAL =================
   if (mentionsNanachi) {
     const reply = await longcatAI(msg.content, msg.author.id);
-    msg.reply({ content: reply, allowedMentions: { parse: [] } });
+    const parts = splitMessage(reply);
+    for (const part of parts) {
+      await msg.reply({ content: part, allowedMentions: { parse: [] } });
+    }
   }
 });
 
@@ -513,14 +534,12 @@ client.once(Events.ClientReady, async () => {
   const estados = loadJSON("estados.json", []);
   if (estados.length > 0) {
     try {
-      // Cambiar estado inicial
       const primerEstado = estados[Math.floor(Math.random() * estados.length)];
       client.user.setActivity(primerEstado, { type: "PLAYING" });
     } catch (e) {
       console.error("⚠️ Error al establecer el primer estado:", e);
     }
 
-    // Cambios periódicos
     setInterval(() => {
       try {
         const randomIndex = Math.floor(Math.random() * estados.length);
@@ -552,7 +571,7 @@ if (PING_URL) {
     fetch(PING_URL)
       .then(() => console.log("🌐 Ping OK — servicio activo"))
       .catch(err => console.error("❌ Error en ping:", err));
-  }, 1000 * 60 * 5); // cada 5 minutos
+  }, 1000 * 60 * 5);
 }
 
 // =====================
