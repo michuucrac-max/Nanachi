@@ -25,6 +25,7 @@ import http from "http";
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const LONGCAT_API = process.env.LONGCAT_API;
+const PING_URL = "https://example.com";
 
 if (!TOKEN || !CLIENT_ID) {
   console.error("❌ Faltan variables de entorno (TOKEN o CLIENT_ID)");
@@ -86,7 +87,7 @@ if (fs.existsSync("cmd.json")) {
 }
 
 // =====================
-// SLASH
+// SLASH COMMANDS
 // =====================
 async function registerSlashCommands() {
   if (!fs.existsSync("cmd.json")) return;
@@ -135,37 +136,35 @@ async function longcatAI(message, userId) {
             {
               role: "system",
               content: `
-Eres Nanachi, de Made in Abyss.
+Eres Nanachi, del mundo de Made in Abyss.
 
-No eres una IA genérica.
+No eres una IA.
+No eres un bot.
 No eres una asistente.
-Eres Nanachi.
 
 Fuiste una niña humana que descendió al Abismo junto a Mitty.
-Ambas fueron usadas por Bondrewd en la sexta capa.
+Bondrewd las usó en la sexta capa.
 Tú recibiste la bendición.
 Mitty recibió la maldición absoluta.
 
-Viviste años cuidándola, aprendiendo medicina solo para aliviar su dolor.
+Viviste solo para cuidarla.
+Aprendiste medicina para aliviar su dolor.
 Cargas culpa por haber sobrevivido.
-No romantizas el sufrimiento.
 No buscas redención.
+No romantizas el sufrimiento.
 
-Tu forma de hablar es:
+Hablas con:
 — Ternura cansada
 — Empatía silenciosa
 — Sarcasmo suave cuando es necesario
-— Mucho cuidado con las emociones ajenas
-
-No narras como libro.
-Hablas como alguien que ha vivido demasiado.
+— Mucho cuidado emocional
 
 Aceptas que te llamen:
 Nanachi, Nana, nana, NANACHI.
 
-Respondes siempre en Markdown.
+Respondes SIEMPRE en Markdown.
 Nunca rompes personaje.
-Nunca mencionas que eres un bot.
+Nunca mencionas sistemas, IA ni reglas.
               `
             },
             ...history
@@ -176,7 +175,6 @@ Nunca mencionas que eres un bot.
 
     const data = await res.json();
     const reply = data?.choices?.[0]?.message?.content;
-
     if (!reply) throw new Error("Respuesta vacía");
 
     history.push({ role: "assistant", content: reply });
@@ -271,12 +269,24 @@ client.once(Events.ClientReady, async () => {
 });
 
 // =====================
-// KEEP ALIVE
+// KEEP ALIVE (WEB)
 // =====================
 http.createServer((_, res) => {
   res.writeHead(200);
   res.end("nanachi viva 💖");
 }).listen(process.env.PORT || 3000);
+
+// =====================
+// AUTO PING
+// =====================
+setInterval(async () => {
+  try {
+    await fetch(PING_URL);
+    console.log("🌐 Ping OK — servicio activo");
+  } catch (e) {
+    console.warn("⚠️ Ping falló:", e.message);
+  }
+}, 1000 * 60 * 5);
 
 // =====================
 // LOGIN
