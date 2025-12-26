@@ -433,8 +433,15 @@ client.on(Events.InteractionCreate, async interaction => {
   const cmd = client.commands.get(interaction.commandName);
   if (!cmd) return;
 
+  // ================= REEMPLAZO {user} Y {target} =================
   let reply = cmd.reply ?? "…";
   reply = reply.replaceAll("{user}", `<@${interaction.user.id}>`);
+
+  // Si el comando tiene opción "target" y el usuario la puso, reemplaza
+  if (interaction.options.getUser("target")) {
+    const targetUser = interaction.options.getUser("target");
+    reply = reply.replaceAll("{target}", `<@${targetUser.id}>`);
+  }
 
   interaction.reply({
     content: reply,
