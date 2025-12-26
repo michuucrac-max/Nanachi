@@ -1,5 +1,5 @@
 // -------------------------
-//  NANACHI — INDEX.JS (STABLE)
+//  NANACHI — INDEX.JS
 // -------------------------
 
 import {
@@ -25,10 +25,10 @@ import http from "http";
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const LONGCAT_API = process.env.LONGCAT_API;
-const PING_URL = "https://example.com";
+const PING_URL = process.env.SERVICE_URL || null;
 
 if (!TOKEN || !CLIENT_ID) {
-  console.error("❌ Faltan variables de entorno");
+  console.error("❌ Faltan variables de entorno (TOKEN o CLIENT_ID)");
   process.exit(1);
 }
 
@@ -66,9 +66,7 @@ const loadJSON = (file, def) => {
 const saveJSON = (file, data) => {
   try {
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.error("⚠️ Error guardando", file);
-  }
+  } catch {}
 };
 
 const tosServers = loadJSON("tos.json", []);
@@ -86,10 +84,10 @@ const aceptarTOSServidor = guildId => {
 };
 
 const tosMessage = () =>
-  "**📜 TÉRMINOS DE SERVICIO — NANACHI**\n\n" +
+  "📜 TÉRMINOS DE SERVICIO — NANACHI\n\n" +
   "Para hablar conmigo debes aceptar los TOS:\n" +
   "👉 https://terminosycondicionesdeserv.jimdofree.com/\n\n" +
-  "_Gracias por respetarlos_ 💙";
+  "Gracias por respetarlos 💙";
 
 // =====================
 // COMANDOS
@@ -105,32 +103,33 @@ if (fs.existsSync("cmd.json")) {
 // SLASH COMMANDS
 // =====================
 async function registerSlashCommands() {
+  if (!fs.existsSync("cmd.json")) return;
+
+  const rawCmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
+  const slashCommands = rawCmds.map(c => ({
+    name: c.name,
+    description: c.description,
+    options: c.options ?? []
+  }));
+
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+
   try {
-    if (!fs.existsSync("cmd.json")) return;
-
-    const rawCmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
-    const slashCommands = rawCmds.map(c => ({
-      name: c.name,
-      description: c.description,
-      options: c.options ?? []
-    }));
-
-    const rest = new REST({ version: "10" }).setToken(TOKEN);
-    await rest.put(Routes.applicationCommands(CLIENT_ID), {
-      body: slashCommands
-    });
-
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      { body: slashCommands }
+    );
     console.log("✅ Slash commands registrados");
   } catch (e) {
-    console.error("⚠️ Error slash:", e.message);
+    console.error("❌ Error registrando comandos:", e);
   }
 }
 
 // =====================
-// LONGCAT AI
+// LONGCAT AI — NANACHI
 // =====================
 async function longcatAI(message, userId) {
-  if (!LONGCAT_API) return "…";
+  if (!LONGCAT_API) return "…Nanachi te escucha en silencio.";
 
   const history = memory.get(userId) ?? [];
   history.push({ role: "user", content: message });
@@ -146,83 +145,103 @@ async function longcatAI(message, userId) {
         },
         body: JSON.stringify({
           model: "LongCat-Flash-Chat",
-          messages: history
+          messages: [
+            {
+              role: "system",
+              content: `TU PROMPT COMPLETO AQUÍ (NO SE BORRÓ)`
+            },
+            ...history
+          ]
         })
       }
     );
 
     const data = await res.json();
-    const reply = data?.choices?.[0]?.message?.content ?? "…";
+    const reply = data?.choices?.[0]?.message?.content;
+
+    if (!reply) throw new Error("Respuesta vacía");
 
     history.push({ role: "assistant", content: reply });
     memory.set(userId, history.slice(-10));
 
     return reply;
   } catch (e) {
-    console.error("⚠️ IA error:", e.message);
-    return "…";
+    console.error("⚠️ Error LongCat AI:", e);
+    return "…perdón, mi cabeza dio vueltas un momento.";
   }
 }
 
 // =====================
-// INTERACTIONS (SAFE)
+// INTERACCIONES
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
-  try {
-    if (!interaction.isButton()) return;
-
+  if (interaction.isButton()) {
     if (interaction.customId === "aceptar_tos_server") {
       aceptarTOSServidor(interaction.guildId);
+      return interaction.update({
+        content: "✅ TOS aceptados",
+        components: []
+      });
     }
 
     if (interaction.customId === "aceptar_tos_dm") {
       tosUsersDM.add(interaction.user.id);
-    }
-
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
+      return interaction.update({
         content: "✅ TOS aceptados",
-        ephemeral: true
+        components: []
       });
     }
-  } catch (e) {
-    console.error("⚠️ Interaction error:", e.message);
   }
+
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.guildId && !tosServers.includes(interaction.guildId)) {
+    return interaction.reply({
+      content: tosMessage(),
+      ephemeral: true
+    });
+  }
+
+  const cmd = client.commands.get(interaction.commandName);
+  if (!cmd) return;
+
+  let reply = cmd.reply ?? "…";
+  reply = reply.replaceAll("{user}", `<@${interaction.user.id}>`);
+
+  interaction.reply({
+    content: reply,
+    allowedMentions: { parse: [] }
+  });
 });
 
 // =====================
-// MESSAGES
+// MENSAJES
 // =====================
 client.on(Events.MessageCreate, async msg => {
-  try {
-    if (msg.author.bot) return;
+  if (msg.author.bot) return;
 
-    // DM
-    if (!msg.guild) {
-      if (!tosUsersDM.has(msg.author.id)) {
-        const boton = new ButtonBuilder()
-          .setCustomId("aceptar_tos_dm")
-          .setLabel("Aceptar TOS")
-          .setStyle(ButtonStyle.Success);
+  if (!msg.guild) {
+    if (!tosUsersDM.has(msg.author.id)) {
+      const boton = new ButtonBuilder()
+        .setCustomId("aceptar_tos_dm")
+        .setLabel("Aceptar TOS")
+        .setStyle(ButtonStyle.Success);
 
-        return msg.reply({
-          content: tosMessage(),
-          components: [new ActionRowBuilder().addComponents(boton)]
-        });
-      }
-
-      const reply = await longcatAI(msg.content, msg.author.id);
-      return msg.reply({ content: reply });
+      return msg.reply({
+        content: tosMessage(),
+        components: [new ActionRowBuilder().addComponents(boton)],
+        allowedMentions: { parse: [] }
+      });
     }
 
-    // GUILD
-    if (!tosServers.includes(msg.guild.id)) return;
-
     const reply = await longcatAI(msg.content, msg.author.id);
-    await msg.reply({ content: reply });
-  } catch (e) {
-    console.error("⚠️ Message error:", e.message);
+    return msg.reply({ content: reply });
   }
+
+  if (!tosServers.includes(msg.guild.id)) return;
+
+  const reply = await longcatAI(msg.content, msg.author.id);
+  msg.reply({ content: reply, allowedMentions: { parse: [] } });
 });
 
 // =====================
@@ -238,28 +257,20 @@ client.once(Events.ClientReady, async () => {
 // =====================
 http.createServer((_, res) => {
   res.writeHead(200);
-  res.end("ok");
+  res.end("nanachi viva 💖");
 }).listen(process.env.PORT || 3000);
 
 // =====================
-// AUTO PING (2 MIN)
+// AUTO PING (SAFE)
 // =====================
-setInterval(async () => {
-  try {
-    await fetch(PING_URL);
-    console.log("🌐 ping");
-  } catch {}
-}, 1000 * 60 * 2);
-
-// =====================
-// SAFETY NET
-// =====================
-process.on("unhandledRejection", err =>
-  console.error("🔥 unhandledRejection:", err)
-);
-process.on("uncaughtException", err =>
-  console.error("🔥 uncaughtException:", err)
-);
+if (PING_URL) {
+  setInterval(async () => {
+    try {
+      await fetch(PING_URL);
+      console.log("🌐 Ping OK — servicio activo");
+    } catch {}
+  }, 1000 * 60 * 5);
+}
 
 // =====================
 // LOGIN
