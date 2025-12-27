@@ -273,6 +273,18 @@ await registerSlashCommands();
 });
 
 // =====================
+// WEB SERVICE — PUERTO OBLIGATORIO PARA RENDER
+// =====================
+const PORT = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+res.writeHead(200, { "Content-Type": "text/plain" });
+res.end("Nanachi observa el Abismo…\n");
+}).listen(PORT, () => {
+console.log(`🌐 Web service activo en el puerto ${PORT}`);
+});
+
+// =====================
 // LOGIN
 // =====================
 client.login(TOKEN);
