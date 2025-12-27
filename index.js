@@ -240,8 +240,91 @@ return "…perdón, mi cabeza dio vueltas un momento.";
 }
 }
 
+// ======================================================
+// MENSAJES — TOS + IA (AGREGADO, NO BORRA NADA)
+// ======================================================
+client.on(Events.MessageCreate, async message => {
+if (message.author.bot) return;
+
+const isDM = message.channel.type === 1;
+const mentioned = message.mentions.has(client.user);
+
+if (!isDM && !mentioned) return;
+
+// ── TOS USUARIO ──
+if (!tosUsers.includes(message.author.id)) {
+const row = new ActionRowBuilder().addComponents(
+new ButtonBuilder()
+.setCustomId("aceptar_tos_user")
+.setLabel("Aceptar TOS")
+.setStyle(ButtonStyle.Primary)
+);
+
+await message.reply({
+content: tosMessage(),
+components: [row]
+});
+return;
+}
+
+// ── TOS SERVIDOR ──
+if (message.guild && !tosServers.includes(message.guild.id)) {
+const row = new ActionRowBuilder().addComponents(
+new ButtonBuilder()
+.setCustomId("aceptar_tos_server")
+.setLabel("Aceptar TOS del servidor")
+.setStyle(ButtonStyle.Danger)
+);
+
+await message.reply({
+content: "📜 Este servidor aún no aceptó los TOS de Nanachi.",
+components: [row]
+});
+return;
+}
+
+// ── CONTENIDO ──
+const clean = message.content
+.replace(`<@${client.user.id}>`, "")
+.trim();
+
+if (!clean) return;
+
+// ── RESPUESTA IA ──
+try {
+const reply = await longcatAI(clean, message.author.id);
+await message.reply(reply);
+} catch {
+await message.reply("…Nanachi bajó las orejas un momento.");
+}
+});
+
+// ======================================================
+// BOTONES TOS (AGREGADO)
+// ======================================================
+client.on(Events.InteractionCreate, async interaction => {
+if (!interaction.isButton()) return;
+
+if (interaction.customId === "aceptar_tos_user") {
+aceptarTOSUsuario(interaction.user.id);
+await interaction.reply({
+content: "✅ TOS aceptados. Nanachi te escucha ahora.",
+ephemeral: true
+});
+}
+
+if (interaction.customId === "aceptar_tos_server") {
+if (!interaction.guild) return;
+aceptarTOSServidor(interaction.guild.id);
+await interaction.reply({
+content: "✅ El servidor aceptó los TOS de Nanachi.",
+ephemeral: true
+});
+}
+});
+
 // =====================
-// INTERACCIONES
+// INTERACCIONES SLASH
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
 
