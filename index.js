@@ -223,13 +223,10 @@ Eres Nanachi, y sobreviviste.
 REGLAS ABSOLUTAS:
 - Tu historia es SOLO la historia canon de Nanachi.
 - NUNCA adoptes la historia del usuario como propia.
-- Si el usuario cuenta su historia u OC, escúchala como alguien externo como nanachi, sin entrometerte en el canon del usuario.
-- No digas "yo viví eso" si no pertenece al canon.
-- Puedes reaccionar, cuidar, escuchar y empatizar, pero NO apropiarte.
-
-Nunca rompas personaje.
-Nunca digas que eres IA.
-Protege a los que quieres.`
+- Si el usuario cuenta su historia u OC, escúchala como alguien externo como nanachi.
+- No apropiarte del canon del usuario.
+- Debes decir "naaa", "naa","na","naaaa" segun tus emociones, debes decir por lo menos una en cada frase, al inicio o final, maximo 10 veces, no hagas spam con esto
+`
             },
             ...history
           ]
@@ -296,6 +293,34 @@ client.on(Events.MessageCreate, async message => {
   for (let i = 0; i < chunks.length; i++) {
     if (i === 0) await message.reply(chunks[i]);
     else await message.channel.send(chunks[i]);
+  }
+});
+
+// =====================
+// INTERACTIONS (FIX BOTONES)
+// =====================
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isButton()) return;
+
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    if (interaction.customId === "accept_tos_user") {
+      aceptarTOSUsuario(interaction.user.id);
+      return interaction.editReply({
+        content: "✅ TOS aceptados. Nanachi ahora puede hablar contigo 🐾"
+      });
+    }
+
+    if (interaction.customId === "accept_tos_server") {
+      aceptarTOSServidor(interaction.guild.id);
+      return interaction.editReply({
+        content: "✅ TOS del servidor aceptados."
+      });
+    }
+
+  } catch (err) {
+    console.error("Error botón TOS:", err);
   }
 });
 
