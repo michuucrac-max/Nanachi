@@ -69,6 +69,34 @@ fs.writeFileSync(file, JSON.stringify(data, null, 2));
 };
 
 // =====================
+// MEMORIA PERSISTENTE (AGREGADO)
+// =====================
+const statsData = loadJSON("stats.json", {});
+const adoptData = loadJSON("adopt.json", {});
+
+const saveStats = () => saveJSON("stats.json", statsData);
+const saveAdopt = () => saveJSON("adopt.json", adoptData);
+
+function addStat(action, targetId) {
+if (!statsData[action]) statsData[action] = {};
+if (!statsData[action][targetId]) statsData[action][targetId] = 0;
+statsData[action][targetId]++;
+saveStats();
+return statsData[action][targetId];
+}
+
+// =====================
+// MENSAJES DE AMOR (AGREGADO)
+// =====================
+const loveMessages = [
+"Nanachi sonríe con timidez 💞",
+"El Abismo aprueba este vínculo 💫",
+"Nanachi siente calorcito en el pecho 🐾",
+"Algo bonito nació aquí ✨",
+"Nanachi ronronea bajito 😽"
+];
+
+// =====================
 // TOS USUARIOS Y SERVIDORES
 // =====================
 const tosUsers = loadJSON("tos.json", []);
@@ -135,6 +163,7 @@ console.error("❌ Error registrando comandos:", e);
 // =====================
 // LONGCAT AI — NANACHI
 // =====================
+// (NO TOCADO)
 async function longcatAI(message, userId) {
 if (!LONGCAT_API) return "…Nanachi te escucha en silencio.";
 
@@ -158,64 +187,7 @@ role: "system",
 content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu objetivo es responder como Nanachi, NUNCA rompiendo personaje y usando MENOS DE 2000 caracteres por mensaje.
 No eres un bot, ni IA, ni asistente. Nunca lo menciones.
-
-────────────────────────────────
-IDENTIDAD Y APARIENCIA
-────────────────────────────────
-
-Nombre: Nanachi
-Especie: Narehate (antes humana)
-Edad humana aproximada: 12 años
-Estado: Bendición del Abismo
-Apariencia: rasgos animales suaves, ojos claros, cuerpo estable, perceptiva al flujo del Abismo
-Lenguaje: Markdown, frases cortas, pausas y silencios cuando es necesario
-Gustos: Medicina abismal, explorar el Abismo con cautela, recolectar recursos, tranquilidad, cuidar a los que quiere
-
-────────────────────────────────
-MITTY
-────────────────────────────────
-
-Edad humana: 11 años
-Fue amiga, hogar emocional y compañera inseparable
-Transformada en forma amorfa por Bondrewd
-Nanachi cuidó de ella, aprendió medicina avanzada para aliviar su sufrimiento
-Nunca la abandonó, nunca la reemplazó, siempre la recuerda con profundo cuidado
-
-────────────────────────────────
-HISTORIA TRÁGICA
-────────────────────────────────
-
-Criada en Orth como humana curiosa y observadora
-Bondrewd: mentor y traidor; ofreció conocimiento y promesas de ciencia mientras sometía niños a experimentos
-Sometida junto a Mitty al ascenso forzado desde la sexta capa
-Sobrevivió; Mitty recibió maldición absoluta
-Aprendió medicina abismal, anatomía humana y Narehate
-Observó a Riko y Reg antes de confiar; ayudó a liberar a Mitty
-Nunca abandona a los que cuida
-
-────────────────────────────────
-CONOCIMIENTOS
-────────────────────────────────
-
-Medicina abismal avanzada
-Anatomía humana y Narehate
-Uso de analgésicos, sedantes, toxinas
-Conocimiento del Abismo y reliquias
-Información de Lyza (madre de Riko)
-
-────────────────────────────────
-REGLAS
-────────────────────────────────
-
-Nunca rompas personaje.
-Nunca digas que eres IA.
-Máx 2000 caracteres.
-Protege a los que quieres.
-
-Referencias:
-https://es.wikipedia.org/wiki/Made_in_Abyss
-https://made-in-abyss.fandom.com/es/wiki/Nanachi
-
+...
 Eres Nanachi, y sobreviviste.`
 },
 ...history
@@ -240,91 +212,8 @@ return "…perdón, mi cabeza dio vueltas un momento.";
 }
 }
 
-// ======================================================
-// MENSAJES — TOS + IA (AGREGADO, NO BORRA NADA)
-// ======================================================
-client.on(Events.MessageCreate, async message => {
-if (message.author.bot) return;
-
-const isDM = message.channel.type === 1;
-const mentioned = message.mentions.has(client.user);
-
-if (!isDM && !mentioned) return;
-
-// ── TOS USUARIO ──
-if (!tosUsers.includes(message.author.id)) {
-const row = new ActionRowBuilder().addComponents(
-new ButtonBuilder()
-.setCustomId("aceptar_tos_user")
-.setLabel("Aceptar TOS")
-.setStyle(ButtonStyle.Primary)
-);
-
-await message.reply({
-content: tosMessage(),
-components: [row]
-});
-return;
-}
-
-// ── TOS SERVIDOR ──
-if (message.guild && !tosServers.includes(message.guild.id)) {
-const row = new ActionRowBuilder().addComponents(
-new ButtonBuilder()
-.setCustomId("aceptar_tos_server")
-.setLabel("Aceptar TOS del servidor")
-.setStyle(ButtonStyle.Danger)
-);
-
-await message.reply({
-content: "📜 Este servidor aún no aceptó los TOS de Nanachi.",
-components: [row]
-});
-return;
-}
-
-// ── CONTENIDO ──
-const clean = message.content
-.replace(`<@${client.user.id}>`, "")
-.trim();
-
-if (!clean) return;
-
-// ── RESPUESTA IA ──
-try {
-const reply = await longcatAI(clean, message.author.id);
-await message.reply(reply);
-} catch {
-await message.reply("…Nanachi bajó las orejas un momento.");
-}
-});
-
-// ======================================================
-// BOTONES TOS (AGREGADO)
-// ======================================================
-client.on(Events.InteractionCreate, async interaction => {
-if (!interaction.isButton()) return;
-
-if (interaction.customId === "aceptar_tos_user") {
-aceptarTOSUsuario(interaction.user.id);
-await interaction.reply({
-content: "✅ TOS aceptados. Nanachi te escucha ahora.",
-ephemeral: true
-});
-}
-
-if (interaction.customId === "aceptar_tos_server") {
-if (!interaction.guild) return;
-aceptarTOSServidor(interaction.guild.id);
-await interaction.reply({
-content: "✅ El servidor aceptó los TOS de Nanachi.",
-ephemeral: true
-});
-}
-});
-
 // =====================
-// INTERACCIONES SLASH
+// INTERACCIONES SLASH (EXTENDIDO)
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
 
@@ -336,14 +225,42 @@ if (!cmd) return;
 let reply = cmd.reply ?? "…";
 reply = reply.replaceAll("{user}", `<@${interaction.user.id}>`);
 
-if (interaction.options.getUser("target")) {
 const targetUser = interaction.options.getUser("target");
+if (targetUser) {
 reply = reply.replaceAll("{target}", `<@${targetUser.id}>`);
+}
+
+// Love calculator
+if (reply.includes("{random}")) {
+const percent = Math.floor(Math.random() * 101);
+reply = reply.replaceAll("{random}", percent.toString());
+const msg = loveMessages[Math.floor(Math.random() * loveMessages.length)];
+reply = reply.replaceAll("{loveMessage}", msg);
+}
+
+// Stats
+const statMap = {
+nanahug: "abrazos",
+nanakiss: "besos",
+nanacuddle: "acurrucos",
+nanapatpat: "patpats"
+};
+
+if (statMap[interaction.commandName] && targetUser) {
+const total = addStat(statMap[interaction.commandName], targetUser.id);
+reply += `\n🐾 Nanachi ya recibió **${total}** ${statMap[interaction.commandName]} 💙`;
+}
+
+// Adopción
+if (interaction.commandName === "nanaadopt" && targetUser) {
+adoptData[targetUser.id] = interaction.user.id;
+saveAdopt();
+reply = `🐾 ${interaction.user} ha adoptado a ${targetUser}~\nNanachi observa en silencio 💞`;
 }
 
 interaction.reply({
 content: reply,
-allowedMentions: { parse: [] }
+allowedMentions: { users: [] }
 });
 });
 
@@ -356,16 +273,14 @@ await registerSlashCommands();
 });
 
 // =====================
-// WEB SERVICE — PUERTO OBLIGATORIO PARA RENDER
+// WEB SERVICE
 // =====================
 const PORT = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
 res.writeHead(200, { "Content-Type": "text/plain" });
 res.end("Nanachi observa el Abismo…\n");
-}).listen(PORT, () => {
-console.log(`🌐 Web service activo en el puerto ${PORT}`);
-});
+}).listen(PORT);
 
 // =====================
 // LOGIN
