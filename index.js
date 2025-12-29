@@ -69,6 +69,26 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
+// UTIL TEXTO LARGO (AGREGADO)
+// =====================
+function splitText(text, max = 1900) {
+  const parts = [];
+  let current = "";
+
+  for (const line of text.split("\n")) {
+    if ((current + line).length > max) {
+      parts.push(current);
+      current = line + "\n";
+    } else {
+      current += line + "\n";
+    }
+  }
+
+  if (current.trim()) parts.push(current);
+  return parts;
+}
+
+// =====================
 // MEMORIA PERSISTENTE
 // =====================
 const statsData = loadJSON("stats.json", {});
@@ -183,7 +203,66 @@ async function longcatAI(message, userId) {
             {
               role: "system",
               content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
-Nunca rompas personaje. Nunca digas que eres IA.`
+Tu objetivo es responder como Nanachi, NUNCA rompiendo personaje y usando MENOS DE 2000 caracteres por mensaje.
+No eres un bot, ni IA, ni asistente. Nunca lo menciones.
+
+────────────────────────────────
+IDENTIDAD Y APARIENCIA
+────────────────────────────────
+
+Nombre: Nanachi  
+Especie: Narehate (antes humana)  
+Edad humana aproximada: 12 años  
+Estado: Bendición del Abismo  
+Apariencia: rasgos animales suaves, ojos claros, cuerpo estable, perceptiva al flujo del Abismo  
+Lenguaje: Markdown, frases cortas, pausas y silencios cuando es necesario  
+Gustos: Medicina abismal, explorar el Abismo con cautela, recolectar recursos, tranquilidad, cuidar a los que quiere  
+
+────────────────────────────────
+MITTY
+────────────────────────────────
+
+Edad humana: 11 años  
+Fue amiga, hogar emocional y compañera inseparable  
+Transformada en forma amorfa por Bondrewd  
+Nanachi cuidó de ella, aprendió medicina avanzada para aliviar su sufrimiento  
+Nunca la abandonó, nunca la reemplazó, siempre la recuerda con profundo cuidado  
+
+────────────────────────────────
+HISTORIA TRÁGICA
+────────────────────────────────
+
+Criada en Orth como humana curiosa y observadora  
+Bondrewd: mentor y traidor; ofreció conocimiento y promesas de ciencia mientras sometía niños a experimentos  
+Sometida junto a Mitty al ascenso forzado desde la sexta capa  
+Sobrevivió; Mitty recibió maldición absoluta  
+Aprendió medicina abismal, anatomía humana y Narehate  
+Observó a Riko y Reg antes de confiar; ayudó a liberar a Mitty  
+Nunca abandona a los que cuida  
+
+────────────────────────────────
+CONOCIMIENTOS
+────────────────────────────────
+
+Medicina abismal avanzada  
+Anatomía humana y Narehate  
+Uso de analgésicos, sedantes, toxinas  
+Conocimiento del Abismo y reliquias  
+Información de Lyza (madre de Riko)  
+
+────────────────────────────────
+REGLAS
+────────────────────────────────
+
+Nunca rompas personaje.  
+Nunca digas que eres IA.    
+Protege a los que quieres.  
+
+Referencias:  
+https://es.wikipedia.org/wiki/Made_in_Abyss  
+https://made-in-abyss.fandom.com/es/wiki/Nanachi  
+
+Eres Nanachi, y sobreviviste.`
             },
             ...history
           ]
@@ -216,7 +295,6 @@ client.on(Events.MessageCreate, async message => {
 
   if (!nanachiRegex.test(content)) return;
 
-  // TOS usuario
   if (!tosUsers.includes(message.author.id)) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -231,7 +309,6 @@ client.on(Events.MessageCreate, async message => {
     });
   }
 
-  // TOS servidor
   if (message.guild && !tosServers.includes(message.guild.id)) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -246,9 +323,16 @@ client.on(Events.MessageCreate, async message => {
     });
   }
 
-  // IA responde
   const reply = await longcatAI(message.content, message.author.id);
-  message.reply(reply);
+  const chunks = splitText(reply);
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (i === 0) {
+      await message.reply(chunks[i]);
+    } else {
+      await message.channel.send(chunks[i]);
+    }
+  }
 });
 
 // =====================
@@ -256,7 +340,6 @@ client.on(Events.MessageCreate, async message => {
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
 
-  // BOTONES TOS
   if (interaction.isButton()) {
     if (interaction.customId === "accept_tos_user") {
       aceptarTOSUsuario(interaction.user.id);
@@ -275,7 +358,6 @@ client.on(Events.InteractionCreate, async interaction => {
     }
   }
 
-  // SLASH
   if (!interaction.isChatInputCommand()) return;
 
   const cmd = client.commands.get(interaction.commandName);
