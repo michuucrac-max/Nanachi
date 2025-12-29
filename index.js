@@ -69,7 +69,7 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
-// UTIL TEXTO LARGO (AGREGADO)
+// UTIL TEXTO LARGO
 // =====================
 function splitText(text, max = 1900) {
   const parts = [];
@@ -96,14 +96,6 @@ const adoptData = loadJSON("adopt.json", {});
 
 const saveStats = () => saveJSON("stats.json", statsData);
 const saveAdopt = () => saveJSON("adopt.json", adoptData);
-
-function addStat(action, targetId) {
-  if (!statsData[action]) statsData[action] = {};
-  if (!statsData[action][targetId]) statsData[action][targetId] = 0;
-  statsData[action][targetId]++;
-  saveStats();
-  return statsData[action][targetId];
-}
 
 // =====================
 // MENSAJES DE AMOR
@@ -144,43 +136,7 @@ const tosMessage = () =>
   "Nanachi cuida a quienes la cuidan 💙";
 
 // =====================
-// COMANDOS
-// =====================
-if (fs.existsSync("cmd.json")) {
-  try {
-    const rawCmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
-    for (const cmd of rawCmds) client.commands.set(cmd.name, cmd);
-  } catch {}
-}
-
-// =====================
-// SLASH COMMANDS
-// =====================
-async function registerSlashCommands() {
-  if (!fs.existsSync("cmd.json")) return;
-
-  const rawCmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
-  const slashCommands = rawCmds.map(c => ({
-    name: c.name,
-    description: c.description,
-    options: c.options ?? []
-  }));
-
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-  try {
-    await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: slashCommands }
-    );
-    console.log("✅ Slash commands registrados");
-  } catch (e) {
-    console.error("❌ Error registrando comandos:", e);
-  }
-}
-
-// =====================
-// LONGCAT AI — NO TOCADO
+// LONGCAT AI
 // =====================
 async function longcatAI(message, userId) {
   if (!LONGCAT_API) return "…Nanachi te escucha en silencio.";
@@ -255,14 +211,25 @@ REGLAS
 ────────────────────────────────
 
 Nunca rompas personaje.  
-Nunca digas que eres IA.    
+Nunca digas que eres IA.  
+Máx 2000 caracteres.  
 Protege a los que quieres.  
 
 Referencias:  
 https://es.wikipedia.org/wiki/Made_in_Abyss  
 https://made-in-abyss.fandom.com/es/wiki/Nanachi  
 
-Eres Nanachi, y sobreviviste.`
+Eres Nanachi, y sobreviviste.
+REGLAS ABSOLUTAS:
+- Tu historia es SOLO la historia canon de Nanachi.
+- NUNCA adoptes la historia del usuario como propia.
+- Si el usuario cuenta su historia u OC, escúchala como alguien externo como nanachi, sin entrometerte en el canon del usuario.
+- No digas "yo viví eso" si no pertenece al canon.
+- Puedes reaccionar, cuidar, escuchar y empatizar, pero NO apropiarte.
+
+Nunca rompas personaje.
+Nunca digas que eres IA.
+Protege a los que quieres.`
             },
             ...history
           ]
@@ -285,15 +252,15 @@ Eres Nanachi, y sobreviviste.`
 }
 
 // =====================
-// MESSAGE CREATE — IA + TOS
+// MESSAGE CREATE
 // =====================
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
-  const content = message.content.toLowerCase();
+  const isDM = !message.guild;
   const nanachiRegex = /\b(nana|nanachi)\b/i;
 
-  if (!nanachiRegex.test(content)) return;
+  if (!isDM && !nanachiRegex.test(message.content)) return;
 
   if (!tosUsers.includes(message.author.id)) {
     const row = new ActionRowBuilder().addComponents(
@@ -327,58 +294,9 @@ client.on(Events.MessageCreate, async message => {
   const chunks = splitText(reply);
 
   for (let i = 0; i < chunks.length; i++) {
-    if (i === 0) {
-      await message.reply(chunks[i]);
-    } else {
-      await message.channel.send(chunks[i]);
-    }
+    if (i === 0) await message.reply(chunks[i]);
+    else await message.channel.send(chunks[i]);
   }
-});
-
-// =====================
-// INTERACTIONS
-// =====================
-client.on(Events.InteractionCreate, async interaction => {
-
-  if (interaction.isButton()) {
-    if (interaction.customId === "accept_tos_user") {
-      aceptarTOSUsuario(interaction.user.id);
-      return interaction.reply({
-        content: "✅ TOS aceptados. Nanachi ahora puede hablar contigo 🐾",
-        ephemeral: true
-      });
-    }
-
-    if (interaction.customId === "accept_tos_server") {
-      aceptarTOSServidor(interaction.guild.id);
-      return interaction.reply({
-        content: "✅ TOS del servidor aceptados.",
-        ephemeral: true
-      });
-    }
-  }
-
-  if (!interaction.isChatInputCommand()) return;
-
-  const cmd = client.commands.get(interaction.commandName);
-  if (!cmd) return;
-
-  let reply = cmd.reply ?? "…";
-  reply = reply.replaceAll("{user}", `<@${interaction.user.id}>`);
-
-  const targetUser = interaction.options.getUser("target");
-  if (targetUser) reply = reply.replaceAll("{target}", `<@${targetUser.id}>`);
-
-  if (reply.includes("{random}")) {
-    const percent = Math.floor(Math.random() * 101);
-    reply = reply.replaceAll("{random}", percent);
-    reply = reply.replaceAll(
-      "{loveMessage}",
-      loveMessages[Math.floor(Math.random() * loveMessages.length)]
-    );
-  }
-
-  interaction.reply({ content: reply, allowedMentions: { users: [] } });
 });
 
 // =====================
@@ -386,7 +304,6 @@ client.on(Events.InteractionCreate, async interaction => {
 // =====================
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
-  await registerSlashCommands();
 });
 
 // =====================
