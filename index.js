@@ -71,22 +71,26 @@ const saveJSON = (file, data) => {
 // =====================
 // ESTADOS ROTATORIOS
 // =====================
-const rawEstados = loadJSON("estados.json", []);
-const estados = Array.isArray(rawEstados) ? rawEstados : [];
+const estados = Array.isArray(loadJSON("estados.json", []))
+  ? loadJSON("estados.json", [])
+  : [];
+
 let estadoIndex = 0;
 
 async function rotarEstados() {
-  if (!client.user) return;
-  if (!estados.length) return;
-
-  const estado = estados[estadoIndex % estados.length];
-  estadoIndex++;
+  if (!client.user || !estados.length) return;
 
   try {
     await client.user.setPresence({
-      activities: [{ name: estado, type: ActivityType.Playing }],
+      activities: [
+        {
+          name: estados[estadoIndex % estados.length],
+          type: ActivityType.Playing
+        }
+      ],
       status: "online"
     });
+    estadoIndex++;
   } catch (e) {
     console.error("Presence error:", e);
   }
@@ -95,7 +99,7 @@ async function rotarEstados() {
 // =====================
 // TEXTO
 // =====================
-function splitText(text, max = 800) {
+function splitText(text, max = 1900) {
   if (typeof text !== "string") return [];
   const parts = [];
   let current = "";
@@ -111,32 +115,16 @@ function splitText(text, max = 800) {
   return parts;
 }
 
-function limitReply(text, max = 700) {
+function limitReply(text, max = 1900) {
   if (typeof text !== "string") return "";
-  return text.length <= max ? text : text.slice(0, max).trim() + "…";
+  return text.length <= max ? text : text.slice(0, max);
 }
-
-// =====================
-// LOVE
-// =====================
-const loveMessages = [
-  "Nanachi se sonroja un poco 🐾",
-  "El Abismo aprueba este vínculo ✨",
-  "Nanachi sonríe tímidamente",
-  "Algo cálido late en el pecho",
-  "Nanachi se acerca en silencio"
-];
 
 // =====================
 // TOS
 // =====================
-const tosUsers = Array.isArray(loadJSON("tos.json", []))
-  ? loadJSON("tos.json", [])
-  : [];
-
-const tosServers = Array.isArray(loadJSON("tosServers.json", []))
-  ? loadJSON("tosServers.json", [])
-  : [];
+const tosUsers = loadJSON("tos.json", []);
+const tosServers = loadJSON("tosServers.json", []);
 
 const aceptarTOSUsuario = id => {
   if (!tosUsers.includes(id)) {
@@ -146,7 +134,7 @@ const aceptarTOSUsuario = id => {
 };
 
 const aceptarTOSServidor = id => {
-  if (id && !tosServers.includes(id)) {
+  if (!tosServers.includes(id)) {
     tosServers.push(id);
     saveJSON("tosServers.json", tosServers);
   }
@@ -162,10 +150,7 @@ const tosMessage = () =>
 async function longcatAI(message, userId) {
   if (!LONGCAT_API) return "…Nanachi te escucha.";
 
-  const history = Array.isArray(memory.get(userId))
-    ? memory.get(userId)
-    : [];
-
+  const history = memory.get(userId) ?? [];
   history.push({ role: "user", content: message });
 
   try {
@@ -296,7 +281,7 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
-tu limite de caracteres es de 2000 y tu minimo es de 100.
+Tu maximo de caracteres escritos son 1800 y tu minimo 100.
 
 Eres Nanachi.
 Sobreviviste.
@@ -306,8 +291,6 @@ Y sigues cuidando >>>` },
         })
       }
     );
-
-    if (!res.ok) throw new Error();
 
     const data = await res.json();
     let reply = data.choices?.[0]?.message?.content;
@@ -324,20 +307,37 @@ Y sigues cuidando >>>` },
 }
 
 // =====================
-// CMD.JSON
+// CMD.JSON + REGISTRO
 // =====================
+const slashData = [];
+
 if (fs.existsSync("cmd.json")) {
   const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
   for (const cmd of cmds) {
     client.commands.set(cmd.name, cmd);
+    slashData.push({
+      name: cmd.name,
+      description: cmd.description ?? "Nanachi responde."
+    });
   }
 }
 
 // =====================
 // READY
 // =====================
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+  try {
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      { body: slashData }
+    );
+    console.log("✅ Slash commands registrados");
+  } catch (e) {
+    console.error("Slash error:", e);
+  }
 
   setTimeout(() => {
     rotarEstados();
@@ -366,18 +366,7 @@ client.on(Events.MessageCreate, async message => {
     return message.reply({ content: tosMessage(), components: [row] });
   }
 
-  if (message.guild && !tosServers.includes(message.guild.id)) {
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("accept_tos_server")
-        .setLabel("Aceptar TOS del servidor")
-        .setStyle(ButtonStyle.Danger)
-    );
-    return message.reply({
-      content: "⚠️ Este servidor no aceptó los TOS.",
-      components: [row]
-    });
-  }
+  if (message.guild && !tosServers.includes(message.guild.id)) return;
 
   await message.channel.sendTyping();
 
@@ -388,11 +377,9 @@ client.on(Events.MessageCreate, async message => {
 });
 
 // =====================
-// INTERACTIONS (BOTONES + SLASH)
+// INTERACTIONS
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
-
-  // BOTONES
   if (interaction.isButton()) {
     await interaction.deferReply({ ephemeral: true });
 
@@ -402,17 +389,17 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     if (interaction.customId === "accept_tos_server") {
-      if (interaction.guild) aceptarTOSServidor(interaction.guild.id);
+      if (interaction.guild)
+        aceptarTOSServidor(interaction.guild.id);
       return interaction.editReply("✅ TOS del servidor aceptados.");
     }
   }
 
-  // SLASH COMMANDS
   if (interaction.isChatInputCommand()) {
     const cmd = client.commands.get(interaction.commandName);
     if (!cmd) return;
 
-    let reply = cmd.reply.replace(
+    const reply = cmd.reply.replace(
       "{user}",
       `<@${interaction.user.id}>`
     );
