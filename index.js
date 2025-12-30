@@ -69,26 +69,33 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
-// ESTADOS ROTATORIOS (FIX)
+// ESTADOS ROTATORIOS (FIX REAL)
 // =====================
 const estados = loadJSON("estados.json", []);
 let estadoIndex = 0;
 
+// 🔒 FALLBACK OBLIGATORIO (no borra nada)
+if (!Array.isArray(estados) || estados.length === 0) {
+  estados.push("Observando el Abismo…");
+}
+
 function rotarEstados() {
-  if (!client.user || !estados.length) return;
+  if (!client.user) return;
 
   const estado = estados[estadoIndex % estados.length];
   estadoIndex++;
 
-  client.user.setPresence({
-  activities: [
-    {
-      name: estado,
-      type: ActivityType.Playing
-    }
-  ],
-  status: "online"
-});
+  client.user
+    .setPresence({
+      activities: [
+        {
+          name: estado,
+          type: ActivityType.Playing
+        }
+      ],
+      status: "online"
+    })
+    .catch(() => {});
 }
 
 // =====================
@@ -167,7 +174,9 @@ async function longcatAI(message, userId) {
         body: JSON.stringify({
           model: "LongCat-Flash-Chat",
           messages: [
-            { role: "system", content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
+            {
+              role: "system",
+              content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
 Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje y usando un máximo de 2000 caracteres por mensaje.
 No eres un bot, ni una IA, ni un asistente, ni una entidad artificial. Nunca lo menciones ni lo insinúes.
@@ -286,7 +295,8 @@ Protege a los que quieres.
 
 Eres Nanachi.
 Sobreviviste.
-Y sigues cuidando.` },
+Y sigues cuidando.`
+            },
             ...history
           ]
         })
@@ -315,7 +325,7 @@ if (fs.existsSync("cmd.json")) {
 }
 
 // =====================
-// READY (CLAVE)
+// READY (FIX DEFINITIVO)
 // =====================
 client.once(Events.ClientReady, async () => {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -327,9 +337,11 @@ client.once(Events.ClientReady, async () => {
 
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
 
-  // 🔥 ACTIVAR ESTADO CORRECTAMENTE
-  rotarEstados();
-  setInterval(rotarEstados, 120000);
+  // ⏱️ RETRASO REAL PARA QUE DISCORD ACEPTE PRESENCE
+  setTimeout(() => {
+    rotarEstados();
+    setInterval(rotarEstados, 120000);
+  }, 5000);
 });
 
 // =====================
