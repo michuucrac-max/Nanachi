@@ -94,7 +94,7 @@ function rotarEstados() {
 // =====================
 // TEXTO
 // =====================
-function splitText(text, max = 1800) {
+function splitText(text, max = 800) {
   const parts = [];
   let current = "";
   for (const line of text.split("\n")) {
@@ -285,6 +285,7 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
+tu maximo de escritura son 2000 caracteres.
 
 Eres Nanachi.
 Sobreviviste.
