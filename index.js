@@ -328,6 +328,17 @@ if (fs.existsSync("cmd.json")) {
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
 
+  // 🟢 FORZAR ONLINE INMEDIATO (coso verde)
+  try {
+    await client.user.setPresence({
+      activities: [],
+      status: "online"
+    });
+  } catch (e) {
+    console.error("Initial presence error:", e);
+  }
+
+  // Registrar slash commands
   const rest = new REST({ version: "10" }).setToken(TOKEN);
   try {
     await rest.put(
@@ -339,10 +350,11 @@ client.once(Events.ClientReady, async () => {
     console.error("Slash error:", e);
   }
 
+  // ⏱️ Esperar 10s y luego iniciar estados
   setTimeout(() => {
     rotarEstados();
     setInterval(rotarEstados, 120000);
-  }, 8000);
+  }, 10000);
 });
 
 // =====================
