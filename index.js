@@ -332,7 +332,15 @@ Y sigues cuidando.`
     return "…Nanachi guarda silencio.";
   }
 }
-
+// =====================
+// CMD.JSON
+// =====================
+if (fs.existsSync("cmd.json")) {
+  const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
+  for (const cmd of cmds) {
+    client.commands.set(cmd.name, cmd);
+  }
+}
 // =====================
 // READY
 // =====================
@@ -417,6 +425,18 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
+// =====================
+// SLASH COMMANDS
+// =====================
+if (interaction.isChatInputCommand()) {
+  const cmd = client.commands.get(interaction.commandName);
+  if (!cmd) return;
+
+  let reply = cmd.reply
+    .replace("{user}", `<@${interaction.user.id}>`);
+
+  await interaction.reply({ content: reply });
+}
 // =====================
 // WEB
 // =====================
