@@ -69,9 +69,9 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
-// ESTADOS ROTATORIOS
+// ESTADOS ROTATORIOS — AJUSTADO
 // =====================
-const estados = loadJSON("estados.json", []);
+const estados = loadJSON("estados.json", ["al Abismo 🐾", "a Riko y Reg ✨"]); // Valores por defecto si el archivo no existe
 let estadoIndex = 0;
 
 function rotarEstados() {
@@ -80,35 +80,37 @@ function rotarEstados() {
   const estado = estados[estadoIndex % estados.length];
   estadoIndex++;
 
+  // Configuración limpia de presencia (asegura que aparezca como activo)
   client.user.setPresence({
-    activities: [
-      {
-        name: estado,
-        type: ActivityType.Playing
-      }
-    ],
+    activities: [{ name: estado, type: ActivityType.Playing }],
     status: "online"
-  });
+  }).catch(err => console.warn("⚠️ Error al actualizar estado:", err)); // Manejo de errores
 }
 
 // =====================
-// TEXTO
+// TEXTO — AJUSTADO PARA RESPUESTAS MÁS CORTAS
 // =====================
-function splitText(text, max = 800) {
+const MAX_RESPUESTA_LONGITUD = 500; // Límite seguro para que Discord no recorte
+const MAX_CHUNK_LONGITUD = 500; // Mismo límite para los fragmentos
+
+function splitText(text, max = MAX_CHUNK_LONGITUD) {
   const parts = [];
   let current = "";
   for (const line of text.split("\n")) {
     if ((current + line).length > max) {
-      parts.push(current);
+      parts.push(current.trim());
       current = line + "\n";
     } else current += line + "\n";
   }
-  if (current.trim()) parts.push(current);
+  if (current.trim()) parts.push(current.trim());
   return parts;
 }
 
-function limitReply(text, max = 700) {
-  return text.length <= max ? text : text.slice(0, max).trim() + "…";
+function limitReply(text, max = MAX_RESPUESTA_LONGITUD) {
+  if (text.length <= max) return text.trim();
+  // Corta en un punto o espacio para que la respuesta sea coherente
+  const corte = text.lastIndexOf(".", max) || text.lastIndexOf(" ", max) || max;
+  return text.slice(0, corte).trim() + ".";
 }
 
 // =====================
@@ -147,10 +149,10 @@ const tosMessage = () =>
   "👉 https://terminosycondicionesdeserv.jimdofree.com/";
 
 // =====================
-// LONGCAT AI
+// LONGCAT AI — AJUSTADO PARA RESPUESTAS MÁS CORTAS
 // =====================
 async function longcatAI(message, userId) {
-  if (!LONGCAT_API) return "…Nanachi te escucha.";
+  if (!LONGCAT_API) return "…Nanachi te escucha, atenta a tus palabras.";
 
   const history = memory.get(userId) ?? [];
   history.push({ role: "user", content: message });
@@ -285,30 +287,41 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
-tu maximo de escritura son 1000 caracteres no te exedas.
-tu minimo de caracteres son 100.
-desbes escribir mas corto oara no generar spam.
 
 Eres Nanachi.
 Sobreviviste.
-Y sigues cuidando.`
+Y sigues cuidando.
+REGLAS DE RESPUESTA:
+- Responde SIEMPRE en MENOS de 500 caracteres.
+- Usa frases cortas, concisas y en estilo canon.
+- No excedas 3 párrafos cortos.
+- Nunca menciones ser IA, bot o asistente.
+- Protege a quienes quieras, habla con ternura y carga tu fondo de tristeza.
+- Máximo 100 palabras por respuesta.
+
+IDENTIDAD:
+Nombre: Nanachi | Especie: Narehate | Edad humana: 12 años | Conocimientos: Medicina abismal, reliquias, maldiciones.
+Relaciones: Mitty (amiga querida), Riko y Reg (cuidados), Vueko (comprensión), Faputa (respeto).`
             },
             ...history
-          ]
+          ],
+          max_tokens: 150, // Limita tokens generados por la IA
+          temperature: 0.7 // Mantiene coherencia sin ser demasiado verboso
         })
       }
     );
 
     const data = await res.json();
-    let reply = data?.choices?.[0]?.message?.content;
-    if (!reply) throw new Error();
+    let reply = data?.choices?.[0]?.message?.content?.trim();
+    if (!reply) throw new Error("Respuesta vacía");
 
-    reply = limitReply(reply);
+    reply = limitReply(reply); // Aplica límite final
     history.push({ role: "assistant", content: reply });
-    memory.set(userId, history.slice(-8));
+    memory.set(userId, history.slice(-5)); // Reduce historial para evitar mensajes largos
     return reply;
-  } catch {
-    return "…Nanachi guarda silencio.";
+  } catch (err) {
+    console.warn("⚠️ Error en LongCat AI:", err.message);
+    return "…Nanachi guarda silencio, mirando al fondo del Abismo.";
   }
 }
 
@@ -316,29 +329,41 @@ Y sigues cuidando.`
 // CMD.JSON
 // =====================
 if (fs.existsSync("cmd.json")) {
-  const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
-  for (const cmd of cmds) client.commands.set(cmd.name, cmd);
+  try {
+    const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
+    for (const cmd of cmds) client.commands.set(cmd.name, cmd);
+    console.log(`📦 Cargados ${cmds.length} comandos`);
+  } catch (err) {
+    console.error("❌ Error al cargar cmd.json:", err);
+  }
 }
 
 // =====================
-// READY
+// READY — AJUSTADO
 // =====================
 client.once(Events.ClientReady, async () => {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-  await rest.put(
-    Routes.applicationCommands(CLIENT_ID),
-    { body: [...client.commands.values()] }
-  );
+  try {
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      { body: [...client.commands.values()] }
+    );
+    console.log("📢 Comandos registrados correctamente");
+  } catch (err) {
+    console.error("❌ Error al registrar comandos:", err);
+  }
 
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+  console.log(`📊 ${estados.length} estados cargados para rotación`);
 
+  // Inicia la rotación de estados y asegura que se actualice
   rotarEstados();
-  setInterval(rotarEstados, 120000);
+  setInterval(rotarEstados, 120000); // Cada 2 minutos
 });
 
 // =====================
-// MESSAGE CREATE
+// MESSAGE CREATE — AJUSTADO
 // =====================
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
@@ -346,6 +371,7 @@ client.on(Events.MessageCreate, async message => {
   const call = /\b(nana|nanachi)\b/i;
   if (!call.test(message.content)) return;
 
+  // Verificación TOS con mensajes más claros
   if (!tosUsers.includes(message.author.id)) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -353,7 +379,7 @@ client.on(Events.MessageCreate, async message => {
         .setLabel("Aceptar TOS")
         .setStyle(ButtonStyle.Success)
     );
-    return message.reply({ content: tosMessage(), components: [row] });
+    return message.reply({ content: tosMessage(), components: [row], ephemeral: false });
   }
 
   if (message.guild && !tosServers.includes(message.guild.id)) {
@@ -364,65 +390,89 @@ client.on(Events.MessageCreate, async message => {
         .setStyle(ButtonStyle.Danger)
     );
     return message.reply({
-      content: "⚠️ Este servidor no aceptó los TOS.",
-      components: [row]
+      content: "⚠️ Este servidor no ha aceptado los términos de servicio. Pide a un administrador que lo haga.",
+      components: [row],
+      ephemeral: false
     });
   }
 
   await message.channel.sendTyping();
 
-  const reply = await longcatAI(message.content, message.author.id);
-  for (const chunk of splitText(reply)) {
-    await message.reply(chunk);
+  try {
+    const reply = await longcatAI(message.content, message.author.id);
+    const chunks = splitText(reply);
+    for (const [i, chunk] of chunks.entries()) {
+      // Evita múltiples mensajes si no es necesario
+      if (i === 0) await message.reply(chunk);
+      else await message.channel.send(chunk);
+    }
+  } catch (err) {
+    console.error("❌ Error al responder mensaje:", err);
+    await message.reply("…Nanachi tiene dificultades para hablar ahora.");
   }
 });
 
 // =====================
-// INTERACTIONS
+// INTERACTIONS — AJUSTADO
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isButton()) {
     await interaction.deferReply({ ephemeral: true });
 
-    if (interaction.customId === "accept_tos_user") {
-      aceptarTOSUsuario(interaction.user.id);
-      return interaction.editReply("✅ TOS aceptados.");
-    }
+    try {
+      if (interaction.customId === "accept_tos_user") {
+        aceptarTOSUsuario(interaction.user.id);
+        return interaction.editReply("✅ TOS aceptados. Ahora puedes hablar con Nanachi.");
+      }
 
-    if (interaction.customId === "accept_tos_server") {
-      aceptarTOSServidor(interaction.guild.id);
-      return interaction.editReply("✅ TOS del servidor aceptados.");
+      if (interaction.customId === "accept_tos_server") {
+        aceptarTOSServidor(interaction.guild.id);
+        return interaction.editReply("✅ TOS del servidor aceptados. Todos los miembros pueden usar el bot.");
+      }
+    } catch (err) {
+      console.error("❌ Error en interacción de botón:", err);
+      return interaction.editReply("⚠️ Ocurrió un error al aceptar los TOS.");
     }
   }
 
   if (!interaction.isChatInputCommand()) return;
 
   const cmd = client.commands.get(interaction.commandName);
-  if (!cmd) return;
+  if (!cmd) return interaction.reply({ content: "❌ Comando no encontrado.", ephemeral: true });
 
-  const random = Math.floor(Math.random() * 101);
-  const lovemessage =
-    loveMessages[Math.floor(Math.random() * loveMessages.length)];
-  const target = interaction.options.getUser("target") ?? client.user;
+  try {
+    const random = Math.floor(Math.random() * 101);
+    const lovemessage = loveMessages[Math.floor(Math.random() * loveMessages.length)];
+    const target = interaction.options.getUser("target") ?? client.user;
 
-  let reply = cmd.reply
-    .replace("{user}", `<@${interaction.user.id}>`)
-    .replace("{target}", `<@${target.id}>`)
-    .replace("{random}", `${random}%`)
-    .replace("{lovemessage}", lovemessage);
+    let reply = cmd.reply
+      .replace("{user}", `<@${interaction.user.id}>`)
+      .replace("{target}", `<@${target.id}>`)
+      .replace("{random}", `${random}%`)
+      .replace("{lovemessage}", lovemessage);
 
-  await interaction.reply(reply);
+    await interaction.reply({ content: reply.trim(), ephemeral: false });
+  } catch (err) {
+    console.error("❌ Error en comando:", err);
+    await interaction.reply({ content: "⚠️ No se pudo ejecutar el comando.", ephemeral: true });
+  }
 });
 
 // =====================
 // WEB
 // =====================
 http.createServer((_, res) => {
-  res.writeHead(200);
-  res.end("Nanachi observa el Abismo…");
-}).listen(process.env.PORT || 3000);
+  res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end("Nanachi observa el Abismo… 🐾");
+}).listen(process.env.PORT || 3000, () => {
+  console.log(`🌐 Servidor web activo en puerto ${process.env.PORT || 3000}`);
+});
 
 // =====================
-// LOGIN
+// LOGIN — AJUSTADO CON MANEJO DE ERRORES
 // =====================
-client.login(TOKEN);
+client.login(TOKEN).catch(err => {
+  console.error("❌ Error al iniciar sesión:", err);
+  process.exit(1);
+});
+                                 
