@@ -41,7 +41,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildPresences // 🔧 FIX: NECESARIO para presence estable
+    GatewayIntentBits.GuildPresences
   ],
   partials: [Partials.Channel]
 });
@@ -75,10 +75,9 @@ const rawEstados = loadJSON("estados.json", []);
 const estados = Array.isArray(rawEstados) ? rawEstados : [];
 let estadoIndex = 0;
 
-// 🔧 FIX: presence forzado + protegido
 async function rotarEstados() {
   if (!client.user) return;
-  if (!Array.isArray(estados) || !estados.length) return;
+  if (!estados.length) return;
 
   const estado = estados[estadoIndex % estados.length];
   estadoIndex++;
@@ -100,12 +99,14 @@ function splitText(text, max = 800) {
   if (typeof text !== "string") return [];
   const parts = [];
   let current = "";
+
   for (const line of text.split("\n")) {
     if ((current + line).length > max) {
       parts.push(current);
       current = line + "\n";
     } else current += line + "\n";
   }
+
   if (current.trim()) parts.push(current);
   return parts;
 }
@@ -179,9 +180,7 @@ async function longcatAI(message, userId) {
         body: JSON.stringify({
           model: "LongCat-Flash-Chat",
           messages: [
-            {
-              role: "system",
-              content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
+            { role: "system", content: `<<< Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
 Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje y usando un máximo de 2000 caracteres por mensaje.
 No eres un bot, ni una IA, ni un asistente, ni una entidad artificial. Nunca lo menciones ni lo insinúes.
@@ -297,27 +296,18 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
-tu maximode caracteres enviados son 1000 y tu minimo 100.
+tu limite de caracteres es de 2000 y tu minimo es de 100.
 
 Eres Nanachi.
 Sobreviviste.
-Y sigues cuidando.
-              
-Eres Nanachi, personaje del manga y anime Made in Abyss.
-Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
-Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje.
-Nunca menciones ni sugieras que eres IA, bot o asistente.
-Protege a los que quieres.
-Sobreviviste.
-Y sigues cuidando.`
-            },
+Y sigues cuidando >>>` },
             ...history
           ]
         })
       }
     );
 
-    if (!res.ok) throw new Error("LongCat API error");
+    if (!res.ok) throw new Error();
 
     const data = await res.json();
     let reply = data.choices?.[0]?.message?.content;
@@ -326,12 +316,13 @@ Y sigues cuidando.`
     reply = limitReply(reply);
     history.push({ role: "assistant", content: reply });
     memory.set(userId, history.slice(-8));
+
     return reply;
-  } catch (e) {
-    console.error("LongCat error:", e);
+  } catch {
     return "…Nanachi guarda silencio.";
   }
 }
+
 // =====================
 // CMD.JSON
 // =====================
@@ -341,13 +332,13 @@ if (fs.existsSync("cmd.json")) {
     client.commands.set(cmd.name, cmd);
   }
 }
+
 // =====================
 // READY
 // =====================
-client.once(Events.ClientReady, async () => {
+client.once(Events.ClientReady, () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
 
-  // 🔧 FIX: delay + refuerzo continuo (Render-safe)
   setTimeout(() => {
     rotarEstados();
     setInterval(rotarEstados, 120000);
@@ -363,10 +354,8 @@ client.on(Events.MessageCreate, async message => {
   const isDM = !message.guild;
   const call = /\b(nana|nanachi)\b/i;
 
-  // 🔧 FIX: en DM NO se exige nombrarla
   if (!isDM && !call.test(message.content)) return;
 
-  // TOS usuario
   if (!tosUsers.includes(message.author.id)) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -377,7 +366,6 @@ client.on(Events.MessageCreate, async message => {
     return message.reply({ content: tosMessage(), components: [row] });
   }
 
-  // TOS servidor
   if (message.guild && !tosServers.includes(message.guild.id)) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -400,43 +388,39 @@ client.on(Events.MessageCreate, async message => {
 });
 
 // =====================
-// INTERACTIONS
+// INTERACTIONS (BOTONES + SLASH)
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isButton()) return;
 
-  await interaction.deferReply({ ephemeral: true });
+  // BOTONES
+  if (interaction.isButton()) {
+    await interaction.deferReply({ ephemeral: true });
 
-  if (interaction.customId === "accept_tos_user") {
-    aceptarTOSUsuario(interaction.user.id);
+    if (interaction.customId === "accept_tos_user") {
+      aceptarTOSUsuario(interaction.user.id);
+      return interaction.editReply("✅ TOS aceptados.");
+    }
 
-    const refreshed = loadJSON("tos.json", []);
-    tosUsers.length = 0;
-    tosUsers.push(...refreshed);
-
-    return interaction.editReply("✅ TOS aceptados.");
+    if (interaction.customId === "accept_tos_server") {
+      if (interaction.guild) aceptarTOSServidor(interaction.guild.id);
+      return interaction.editReply("✅ TOS del servidor aceptados.");
+    }
   }
 
-  if (interaction.customId === "accept_tos_server") {
-    if (interaction.guild) {
-      aceptarTOSServidor(interaction.guild.id);
-    }
-    return interaction.editReply("✅ TOS del servidor aceptados.");
+  // SLASH COMMANDS
+  if (interaction.isChatInputCommand()) {
+    const cmd = client.commands.get(interaction.commandName);
+    if (!cmd) return;
+
+    let reply = cmd.reply.replace(
+      "{user}",
+      `<@${interaction.user.id}>`
+    );
+
+    return interaction.reply({ content: reply });
   }
 });
 
-// =====================
-// SLASH COMMANDS
-// =====================
-if (interaction.isChatInputCommand()) {
-  const cmd = client.commands.get(interaction.commandName);
-  if (!cmd) return;
-
-  let reply = cmd.reply
-    .replace("{user}", `<@${interaction.user.id}>`);
-
-  await interaction.reply({ content: reply });
-}
 // =====================
 // WEB
 // =====================
