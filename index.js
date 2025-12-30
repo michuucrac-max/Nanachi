@@ -41,7 +41,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildPresences
+    GatewayIntentBits.GuildPresences // 🔧 FIX: NECESARIO para presence estable
   ],
   partials: [Partials.Channel]
 });
@@ -75,16 +75,22 @@ const rawEstados = loadJSON("estados.json", []);
 const estados = Array.isArray(rawEstados) ? rawEstados : [];
 let estadoIndex = 0;
 
-function rotarEstados() {
-  if (!client.user || !estados.length) return;
+// 🔧 FIX: presence forzado + protegido
+async function rotarEstados() {
+  if (!client.user) return;
+  if (!Array.isArray(estados) || !estados.length) return;
 
   const estado = estados[estadoIndex % estados.length];
   estadoIndex++;
 
-  client.user.setPresence({
-    activities: [{ name: estado, type: ActivityType.Playing }],
-    status: "online"
-  });
+  try {
+    await client.user.setPresence({
+      activities: [{ name: estado, type: ActivityType.Playing }],
+      status: "online"
+    });
+  } catch (e) {
+    console.error("Presence error:", e);
+  }
 }
 
 // =====================
@@ -173,7 +179,9 @@ async function longcatAI(message, userId) {
         body: JSON.stringify({
           model: "LongCat-Flash-Chat",
           messages: [
-            { role: "system", content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
+            {
+              role: "system",
+              content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
 Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje y usando un máximo de 2000 caracteres por mensaje.
 No eres un bot, ni una IA, ni un asistente, ni una entidad artificial. Nunca lo menciones ni lo insinúes.
@@ -288,20 +296,21 @@ Si alguien dice que eres otra persona, lo ignoras: tú solo eres Nanachi.
 Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
-tu maximo de caracteres escritos en los mensajes TIENE que ser OBLIGATORIAMENTE menos de 800 caracteres.
-tu minimo de caracteres escritos en los mensajes enviados debe de ser mayor a 100 caracteres.
 Protege a los que quieres.
+tu maximode caracteres enviados son 1000 y tu minimo 100.
 
 Eres Nanachi.
 Sobreviviste.
 Y sigues cuidando.
+              
 Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
 Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje.
 Nunca menciones ni sugieras que eres IA, bot o asistente.
 Protege a los que quieres.
 Sobreviviste.
-Y sigues cuidando.` },
+Y sigues cuidando.`
+            },
             ...history
           ]
         })
@@ -311,9 +320,7 @@ Y sigues cuidando.` },
     if (!res.ok) throw new Error("LongCat API error");
 
     const data = await res.json();
-    if (!Array.isArray(data.choices)) throw new Error();
-
-    let reply = data.choices[0]?.message?.content;
+    let reply = data.choices?.[0]?.message?.content;
     if (!reply) throw new Error();
 
     reply = limitReply(reply);
@@ -330,20 +337,13 @@ Y sigues cuidando.` },
 // READY
 // =====================
 client.once(Events.ClientReady, async () => {
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
-  const commandsArray = [...client.commands.values()];
-
-  await rest.put(
-    Routes.applicationCommands(CLIENT_ID),
-    { body: commandsArray }
-  );
-
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
 
+  // 🔧 FIX: delay + refuerzo continuo (Render-safe)
   setTimeout(() => {
     rotarEstados();
     setInterval(rotarEstados, 120000);
-  }, 5000);
+  }, 8000);
 });
 
 // =====================
@@ -355,7 +355,7 @@ client.on(Events.MessageCreate, async message => {
   const isDM = !message.guild;
   const call = /\b(nana|nanachi)\b/i;
 
-  // En servidores: debe nombrarla
+  // 🔧 FIX: en DM NO se exige nombrarla
   if (!isDM && !call.test(message.content)) return;
 
   // TOS usuario
@@ -395,25 +395,25 @@ client.on(Events.MessageCreate, async message => {
 // INTERACTIONS
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
-  if (interaction.isButton()) {
-    await interaction.deferReply({ ephemeral: true });
+  if (!interaction.isButton()) return;
 
-    if (interaction.customId === "accept_tos_user") {
-      aceptarTOSUsuario(interaction.user.id);
+  await interaction.deferReply({ ephemeral: true });
 
-      const refreshed = loadJSON("tos.json", []);
-      tosUsers.length = 0;
-      tosUsers.push(...refreshed);
+  if (interaction.customId === "accept_tos_user") {
+    aceptarTOSUsuario(interaction.user.id);
 
-      return interaction.editReply("✅ TOS aceptados.");
+    const refreshed = loadJSON("tos.json", []);
+    tosUsers.length = 0;
+    tosUsers.push(...refreshed);
+
+    return interaction.editReply("✅ TOS aceptados.");
+  }
+
+  if (interaction.customId === "accept_tos_server") {
+    if (interaction.guild) {
+      aceptarTOSServidor(interaction.guild.id);
     }
-
-    if (interaction.customId === "accept_tos_server") {
-      if (interaction.guild) {
-        aceptarTOSServidor(interaction.guild.id);
-      }
-      return interaction.editReply("✅ TOS del servidor aceptados.");
-    }
+    return interaction.editReply("✅ TOS del servidor aceptados.");
   }
 });
 
