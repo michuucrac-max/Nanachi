@@ -12,7 +12,8 @@ import {
   Events,
   ButtonBuilder,
   ButtonStyle,
-  ActionRowBuilder
+  ActionRowBuilder,
+  ActivityType
 } from "discord.js";
 
 import fs from "fs";
@@ -41,7 +42,10 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
   ],
-  partials: [Partials.Channel]
+  partials: [Partials.Channel],
+  presence: {
+    status: "online" // 👈 NANACHI ACTIVA
+  }
 });
 
 client.commands = new Collection();
@@ -67,6 +71,29 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
+// ESTADOS ROTATORIOS (NUEVO)
+// =====================
+const estados = loadJSON("estados.json", []);
+let estadoIndex = 0;
+
+function rotarEstados() {
+  if (!estados.length || !client.user) return;
+
+  const estado = estados[estadoIndex % estados.length];
+  estadoIndex++;
+
+  client.user.setPresence({
+    activities: [
+      {
+        name: estado,
+        type: ActivityType.Playing
+      }
+    ],
+    status: "online"
+  });
+}
+
+// =====================
 // TEXTO LARGO
 // =====================
 function splitText(text, max = 1800) {
@@ -83,12 +110,23 @@ function splitText(text, max = 1800) {
 }
 
 // =====================
-// LIMITADOR (NUEVO)
+// LIMITADOR SUAVE
 // =====================
-function limitReply(text, max = 2000) {
+function limitReply(text, max = 700) {
   if (text.length <= max) return text;
   return text.slice(0, max).trim() + "…";
 }
+
+// =====================
+// LOVE MESSAGES (NUEVO)
+// =====================
+const loveMessages = [
+  "Nanachi se sonroja un poco 🐾",
+  "El Abismo aprueba este vínculo ✨",
+  "Nanachi sonríe tímidamente",
+  "Algo cálido late en el pecho",
+  "Nanachi se acerca en silencio"
+];
 
 // =====================
 // TOS
@@ -116,7 +154,7 @@ const tosMessage = () =>
   "👉 https://terminosycondicionesdeserv.jimdofree.com/";
 
 // =====================
-// LONGCAT AI
+// LONGCAT AI (NO TOCADO)
 // =====================
 async function longcatAI(message, userId) {
   if (!LONGCAT_API) return "…Nanachi te escucha.";
@@ -266,8 +304,7 @@ Y sigues cuidando.` },
     let reply = data?.choices?.[0]?.message?.content;
     if (!reply) throw new Error();
 
-    reply = limitReply(reply); // 👈 RESPUESTA MÁS CORTA
-
+    reply = limitReply(reply);
     history.push({ role: "assistant", content: reply });
     memory.set(userId, history.slice(-8));
     return reply;
@@ -277,7 +314,7 @@ Y sigues cuidando.` },
 }
 
 // =====================
-// CMD.JSON (NUEVO)
+// CMD.JSON
 // =====================
 if (fs.existsSync("cmd.json")) {
   const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
@@ -285,7 +322,7 @@ if (fs.existsSync("cmd.json")) {
 }
 
 // =====================
-// SLASH REGISTER
+// READY
 // =====================
 client.once(Events.ClientReady, async () => {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -302,67 +339,35 @@ client.once(Events.ClientReady, async () => {
   );
 
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+
+  rotarEstados();
+  setInterval(rotarEstados, 120000); // 👈 CADA 2 MINUTOS
 });
 
 // =====================
-// MESSAGE CREATE
-// =====================
-client.on(Events.MessageCreate, async message => {
-  if (message.author.bot) return;
-
-  const isDM = !message.guild;
-  const call = /\b(nana|nanachi)\b/i;
-
-  if (!isDM && !call.test(message.content)) return;
-
-  if (!tosUsers.includes(message.author.id)) {
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("accept_tos_user")
-        .setLabel("Aceptar TOS")
-        .setStyle(ButtonStyle.Success)
-    );
-    return message.reply({ content: tosMessage(), components: [row] });
-  }
-
-  await message.channel.sendTyping(); // 👈 ESCRIBIENDO…
-
-  const reply = await longcatAI(message.content, message.author.id);
-  const chunks = splitText(reply);
-
-  for (let i = 0; i < chunks.length; i++) {
-    if (i === 0) await message.reply(chunks[i]);
-    else await message.channel.send(chunks[i]);
-  }
-});
-
-// =====================
-// SLASH HANDLER
+// SLASH HANDLER (LOVE FIX)
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
-  if (interaction.isButton()) {
-    await interaction.deferReply({ ephemeral: true });
-
-    if (interaction.customId === "accept_tos_user") {
-      aceptarTOSUsuario(interaction.user.id);
-      return interaction.editReply("✅ TOS aceptados.");
-    }
-    if (interaction.customId === "accept_tos_server") {
-      aceptarTOSServidor(interaction.guild.id);
-      return interaction.editReply("✅ TOS del servidor aceptados.");
-    }
-  }
-
   if (!interaction.isChatInputCommand()) return;
 
   const cmd = client.commands.get(interaction.commandName);
   if (!cmd) return;
 
-  let reply = cmd.reply
-    .replace("{user}", `<@${interaction.user.id}>`);
+  let reply = cmd.reply;
 
-  const target = interaction.options.getUser("target");
-  if (target) reply = reply.replace("{target}", `<@${target.id}>`);
+  const user = `<@${interaction.user.id}>`;
+  const target =
+    interaction.options.getUser("target") ?? client.user;
+
+  const random = Math.floor(Math.random() * 101);
+  const lovemessage =
+    loveMessages[Math.floor(Math.random() * loveMessages.length)];
+
+  reply = reply
+    .replace("{user}", user)
+    .replace("{target}", `<@${target.id}>`)
+    .replace("{random}", `${random}%`)
+    .replace("{lovemessage}", lovemessage);
 
   await interaction.reply(reply);
 });
