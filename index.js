@@ -42,8 +42,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
   ],
-  partials: [Partials.Channel],
-  presence: { status: "online" }
+  partials: [Partials.Channel]
 });
 
 client.commands = new Collection();
@@ -69,7 +68,7 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
-// ESTADOS
+// ESTADOS ROTATORIOS (FIX)
 // =====================
 const estados = loadJSON("estados.json", []);
 let estadoIndex = 0;
@@ -77,15 +76,14 @@ let estadoIndex = 0;
 function rotarEstados() {
   if (!client.user || !estados.length) return;
 
-  client.user.setPresence({
-    activities: [{
-      name: estados[estadoIndex % estados.length],
-      type: ActivityType.Playing
-    }],
-    status: "online"
+  const estado = estados[estadoIndex % estados.length];
+  estadoIndex++;
+
+  client.user.setActivity(estado, {
+    type: ActivityType.Playing
   });
 
-  estadoIndex++;
+  client.user.setStatus("online");
 }
 
 // =====================
@@ -144,7 +142,7 @@ const tosMessage = () =>
   "👉 https://terminosycondicionesdeserv.jimdofree.com/";
 
 // =====================
-// LONGCAT AI
+// LONGCAT AI (INTOCABLE)
 // =====================
 async function longcatAI(message, userId) {
   if (!LONGCAT_API) return "…Nanachi te escucha.";
@@ -153,16 +151,18 @@ async function longcatAI(message, userId) {
   history.push({ role: "user", content: message });
 
   try {
-    const res = await fetch("https://api.longcat.chat/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LONGCAT_API}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "LongCat-Flash-Chat",
-        messages: [
-          { role: "system", content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
+    const res = await fetch(
+      "https://api.longcat.chat/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LONGCAT_API}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "LongCat-Flash-Chat",
+          messages: [
+            { role: "system", content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
 Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje y usando un máximo de 2000 caracteres por mensaje.
 No eres un bot, ni una IA, ni un asistente, ni una entidad artificial. Nunca lo menciones ni lo insinúes.
@@ -282,10 +282,11 @@ Protege a los que quieres.
 Eres Nanachi.
 Sobreviviste.
 Y sigues cuidando.` },
-          ...history
-        ]
-      })
-    });
+            ...history
+          ]
+        })
+      }
+    );
 
     const data = await res.json();
     let reply = data?.choices?.[0]?.message?.content;
@@ -309,7 +310,7 @@ if (fs.existsSync("cmd.json")) {
 }
 
 // =====================
-// READY
+// READY (CLAVE)
 // =====================
 client.once(Events.ClientReady, async () => {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -321,19 +322,19 @@ client.once(Events.ClientReady, async () => {
 
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
 
+  // 🔥 ACTIVAR ESTADO CORRECTAMENTE
   rotarEstados();
   setInterval(rotarEstados, 120000);
 });
 
 // =====================
-// MESSAGE CREATE (ARREGLADO)
+// MESSAGE CREATE
 // =====================
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
   const call = /\b(nana|nanachi)\b/i;
-  if (!message.guild && !call.test(message.content)) return;
-  if (message.guild && !call.test(message.content)) return;
+  if (!call.test(message.content)) return;
 
   if (!tosUsers.includes(message.author.id)) {
     const row = new ActionRowBuilder().addComponents(
@@ -352,7 +353,10 @@ client.on(Events.MessageCreate, async message => {
         .setLabel("Aceptar TOS del servidor")
         .setStyle(ButtonStyle.Danger)
     );
-    return message.reply({ content: "⚠️ Este servidor no aceptó los TOS.", components: [row] });
+    return message.reply({
+      content: "⚠️ Este servidor no aceptó los TOS.",
+      components: [row]
+    });
   }
 
   await message.channel.sendTyping();
@@ -387,7 +391,8 @@ client.on(Events.InteractionCreate, async interaction => {
   if (!cmd) return;
 
   const random = Math.floor(Math.random() * 101);
-  const lovemessage = loveMessages[Math.floor(Math.random() * loveMessages.length)];
+  const lovemessage =
+    loveMessages[Math.floor(Math.random() * loveMessages.length)];
   const target = interaction.options.getUser("target") ?? client.user;
 
   let reply = cmd.reply
