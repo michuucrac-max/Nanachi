@@ -79,11 +79,15 @@ function rotarEstados() {
   const estado = estados[estadoIndex % estados.length];
   estadoIndex++;
 
-  client.user.setActivity(estado, {
-    type: ActivityType.Playing
-  });
-
-  client.user.setStatus("online");
+  client.user.setPresence({
+  activities: [
+    {
+      name: estado,
+      type: ActivityType.Playing
+    }
+  ],
+  status: "online"
+});
 }
 
 // =====================
