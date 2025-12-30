@@ -301,4 +301,81 @@ client.once(Events.ClientReady, async () => {
     { body: data }
   );
 
-  console.log(`✅ Nanachi conectada como
+  console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+});
+
+// =====================
+// MESSAGE CREATE
+// =====================
+client.on(Events.MessageCreate, async message => {
+  if (message.author.bot) return;
+
+  const isDM = !message.guild;
+  const call = /\b(nana|nanachi)\b/i;
+
+  if (!isDM && !call.test(message.content)) return;
+
+  if (!tosUsers.includes(message.author.id)) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("accept_tos_user")
+        .setLabel("Aceptar TOS")
+        .setStyle(ButtonStyle.Success)
+    );
+    return message.reply({ content: tosMessage(), components: [row] });
+  }
+
+  await message.channel.sendTyping(); // 👈 ESCRIBIENDO…
+
+  const reply = await longcatAI(message.content, message.author.id);
+  const chunks = splitText(reply);
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (i === 0) await message.reply(chunks[i]);
+    else await message.channel.send(chunks[i]);
+  }
+});
+
+// =====================
+// SLASH HANDLER
+// =====================
+client.on(Events.InteractionCreate, async interaction => {
+  if (interaction.isButton()) {
+    await interaction.deferReply({ ephemeral: true });
+
+    if (interaction.customId === "accept_tos_user") {
+      aceptarTOSUsuario(interaction.user.id);
+      return interaction.editReply("✅ TOS aceptados.");
+    }
+    if (interaction.customId === "accept_tos_server") {
+      aceptarTOSServidor(interaction.guild.id);
+      return interaction.editReply("✅ TOS del servidor aceptados.");
+    }
+  }
+
+  if (!interaction.isChatInputCommand()) return;
+
+  const cmd = client.commands.get(interaction.commandName);
+  if (!cmd) return;
+
+  let reply = cmd.reply
+    .replace("{user}", `<@${interaction.user.id}>`);
+
+  const target = interaction.options.getUser("target");
+  if (target) reply = reply.replace("{target}", `<@${target.id}>`);
+
+  await interaction.reply(reply);
+});
+
+// =====================
+// WEB
+// =====================
+http.createServer((_, res) => {
+  res.writeHead(200);
+  res.end("Nanachi observa el Abismo…");
+}).listen(process.env.PORT || 3000);
+
+// =====================
+// LOGIN
+// =====================
+client.login(TOKEN);
