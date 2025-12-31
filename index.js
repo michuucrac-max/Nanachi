@@ -1,4 +1,4 @@
-// -------------------------
+lo// -------------------------
 //  NANACHI — INDEX.JS
 // -------------------------
 
@@ -364,7 +364,7 @@ client.once(Events.ClientReady, async () => {
 });
 
 // =====================
-// MESSAGE CREATE
+// MESAGE CREATE
 // =====================
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
@@ -372,17 +372,10 @@ client.on(Events.MessageCreate, async message => {
   const isDM = !message.guild;
   const call = /\b(nana|nanachi)\b/i;
 
-  // Si está en servidor y la nombran, responde
-  const shouldReply = isDM || call.test(message.content);
+  // Solo responde si es DM o la nombran
+  if (!isDM && !call.test(message.content)) return;
 
-  // Guardamos todo lo que pasa en memoria para contexto, aunque no responda
-  const userHistory = memory.get(message.author.id) ?? [];
-  userHistory.push({ role: "user", content: message.content });
-  memory.set(message.author.id, userHistory.slice(-8));
-
-  // Si no debe responder, terminamos aquí
-  if (!shouldReply) return;
-
+  // TOS: si no aceptó, mostrar botón
   if (!tosUsers.includes(message.author.id)) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -399,9 +392,10 @@ client.on(Events.MessageCreate, async message => {
 
   if (message.guild && !tosServers.includes(message.guild.id)) return;
 
+  // Envía typing y responde con LongCat AI
   await message.channel.sendTyping();
-
   const reply = await longcatAI(message.content, message.author.id);
+
   for (const chunk of splitText(reply)) {
     await message.reply(chunk);
   }
