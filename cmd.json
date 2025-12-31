@@ -132,6 +132,6 @@
     "options": [
       { "type": 6, "name": "target", "description": "Persona especial", "required": true }
     ],
-    "reply": "💘 **Compatibilidad amorosa** 💘\n{user} ❤️ {target}\nResultado: **{random}%**\nNanachi dice: {loveMessage}"
+    "reply": "💘 **Compatibilidad amorosa** 💘\n{user} ❤️ {target}\nResultado: **{random}%**\nNanachi dice: {lovemessage}"
   }
 ]
