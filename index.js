@@ -434,18 +434,37 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isChatInputCommand()) {
     const cmd = client.commands.get(interaction.commandName);
-    if (!cmd) return;
+  if (interaction.isChatInputCommand()) {
+  const cmd = client.commands.get(interaction.commandName);
+  if (!cmd) return;
 
-    const target =
-      interaction.options.getUser("target") ?? interaction.user;
+  const target =
+    interaction.options.getUser("target") ?? interaction.user;
 
-    const reply = cmd.reply
-      .replace("{user}", `<@${interaction.user.id}>`)
-      .replace("{target}", `<@${target.id}>`);
+  const random = Math.floor(Math.random() * 101);
 
-    return interaction.reply({ content: reply });
+  const loveMessages = [
+    "Nanachi se sonroja un poco 🐾",
+    "El Abismo observa este vínculo",
+    "Nanachi aparta la mirada, nerviosa",
+    "Algo cálido se siente en el pecho",
+    "Nanachi se acerca en silencio",
+    "Nanachi esta orgullosa de este vinculo",
+    "el abismo aprueba esta relacion",
+    "nanachi les da privacidad",
+  ];
+
+  const lovemessage =
+    loveMessages[Math.floor(Math.random() * loveMessages.length)];
+
+  const reply = cmd.reply
+    .replace(/{user}/g, `<@${interaction.user.id}>`)
+    .replace(/{target}/g, `<@${target.id}>`)
+    .replace(/{random}/g, `${random}`)
+    .replace(/{lovemessage}/g, lovemessage);
+
+  return interaction.reply({ content: reply });
   }
-});
 
 // =====================
 // WEB
