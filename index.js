@@ -417,6 +417,7 @@ client.on(Events.MessageCreate, async message => {
 // INTERACTIONS
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
+  // ---- BOTONES ----
   if (interaction.isButton()) {
     await interaction.deferReply({ ephemeral: true });
 
@@ -432,9 +433,9 @@ client.on(Events.InteractionCreate, async interaction => {
     }
   }
 
-  if (interaction.isChatInputCommand()) {
-    const cmd = client.commands.get(interaction.commandName);
-  if (interaction.isChatInputCommand()) {
+  // ---- SLASH COMMANDS ----
+  if (!interaction.isChatInputCommand()) return;
+
   const cmd = client.commands.get(interaction.commandName);
   if (!cmd) return;
 
@@ -449,9 +450,9 @@ client.on(Events.InteractionCreate, async interaction => {
     "Nanachi aparta la mirada, nerviosa",
     "Algo cálido se siente en el pecho",
     "Nanachi se acerca en silencio",
-    "Nanachi esta orgullosa de este vinculo",
-    "el abismo aprueba esta relacion",
-    "nanachi les da privacidad",
+    "Nanachi está orgullosa de este vínculo",
+    "El Abismo aprueba esta relación",
+    "Nanachi les da privacidad"
   ];
 
   const lovemessage =
@@ -464,7 +465,7 @@ client.on(Events.InteractionCreate, async interaction => {
     .replace(/{lovemessage}/g, lovemessage);
 
   return interaction.reply({ content: reply });
-  }
+});
 
 // =====================
 // WEB
