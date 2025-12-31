@@ -375,27 +375,39 @@ client.on(Events.MessageCreate, async message => {
   // Solo responde si es DM o la nombran
   if (!isDM && !call.test(message.content)) return;
 
-  // TOS: si no aceptó, mostrar botón
-  if (!tosUsers.includes(message.author.id)) {
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("accept_tos_user")
-        .setLabel("Aceptar TOS")
-        .setStyle(ButtonStyle.Success)
-    );
-
-    return message.reply({
-      content: tosMessage(),
-      components: [row]
-    });
+  // --- TOS ---
+  if (isDM) {
+    if (!tosUsers.includes(message.author.id)) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("accept_tos_user")
+          .setLabel("Aceptar TOS")
+          .setStyle(ButtonStyle.Success)
+      );
+      return message.reply({
+        content: tosMessage(),
+        components: [row]
+      });
+    }
+  } else {
+    // Mensaje en servidor
+    if (!tosServers.includes(message.guild.id)) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("accept_tos_server")
+          .setLabel("Aceptar TOS del servidor")
+          .setStyle(ButtonStyle.Success)
+      );
+      return message.reply({
+        content: tosMessage(),
+        components: [row]
+      });
+    }
   }
 
-  if (message.guild && !tosServers.includes(message.guild.id)) return;
-
-  // Envía typing y responde con LongCat AI
+  // --- Responder ---
   await message.channel.sendTyping();
   const reply = await longcatAI(message.content, message.author.id);
-
   for (const chunk of splitText(reply)) {
     await message.reply(chunk);
   }
