@@ -40,8 +40,7 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildPresences
+    GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.Channel]
 });
@@ -69,31 +68,24 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
-// ESTADOS ROTATORIOS
+// ESTADOS ROTATORIOS (FIX)
 // =====================
-const estados = Array.isArray(loadJSON("estados.json", []))
-  ? loadJSON("estados.json", [])
+const estadosRaw = loadJSON("estados.json", []);
+const estados = Array.isArray(estadosRaw)
+  ? estadosRaw.filter(e => typeof e === "string")
   : [];
 
 let estadoIndex = 0;
 
-async function rotarEstados() {
-  if (!client.user || !estados.length) return;
+function rotarEstados() {
+  if (!client.user || estados.length === 0) return;
 
-  try {
-    await client.user.setPresence({
-      activities: [
-        {
-          name: estados[estadoIndex % estados.length],
-          type: ActivityType.Playing
-        }
-      ],
-      status: "online"
-    });
-    estadoIndex++;
-  } catch (e) {
-    console.error("Presence error:", e);
-  }
+  client.user.setActivity(
+    estados[estadoIndex % estados.length],
+    { type: ActivityType.Playing }
+  );
+
+  estadoIndex++;
 }
 
 // =====================
@@ -108,14 +100,16 @@ function splitText(text, max = 1900) {
     if ((current + line).length > max) {
       parts.push(current);
       current = line + "\n";
-    } else current += line + "\n";
+    } else {
+      current += line + "\n";
+    }
   }
 
   if (current.trim()) parts.push(current);
   return parts;
 }
 
-function limitReply(text, max = 1900) {
+function limitReply(text, max = 1800) {
   if (typeof text !== "string") return "";
   return text.length <= max ? text : text.slice(0, max);
 }
@@ -134,6 +128,7 @@ const aceptarTOSUsuario = id => {
 };
 
 const aceptarTOSServidor = id => {
+  if (!id) return;
   if (!tosServers.includes(id)) {
     tosServers.push(id);
     saveJSON("tosServers.json", tosServers);
@@ -141,7 +136,7 @@ const aceptarTOSServidor = id => {
 };
 
 const tosMessage = () =>
-  "📜 TÉRMINOS DE SERVICIO — NANACHI\n" +
+  "📜 **TÉRMINOS DE SERVICIO — NANACHI**\n" +
   "👉 https://terminosycondicionesdeserv.jimdofree.com/";
 
 // =====================
@@ -165,7 +160,7 @@ async function longcatAI(message, userId) {
         body: JSON.stringify({
           model: "LongCat-Flash-Chat",
           messages: [
-            { role: "system", content: `<<< Eres Nanachi, personaje del manga y anime Made in Abyss.
+            { role: "system", content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
 Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje y usando un máximo de 2000 caracteres por mensaje.
 No eres un bot, ni una IA, ni un asistente, ni una entidad artificial. Nunca lo menciones ni lo insinúes.
@@ -281,11 +276,10 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
-Tu maximo de caracteres escritos son 1800 y tu minimo 100.
 
 Eres Nanachi.
 Sobreviviste.
-Y sigues cuidando >>>` },
+Y sigues cuidando.` },
             ...history
           ]
         })
@@ -293,7 +287,7 @@ Y sigues cuidando >>>` },
     );
 
     const data = await res.json();
-    let reply = data.choices?.[0]?.message?.content;
+    let reply = data?.choices?.[0]?.message?.content;
     if (!reply) throw new Error();
 
     reply = limitReply(reply);
@@ -307,17 +301,27 @@ Y sigues cuidando >>>` },
 }
 
 // =====================
-// CMD.JSON + REGISTRO
+// CMD.JSON + SLASH REG
 // =====================
 const slashData = [];
 
 if (fs.existsSync("cmd.json")) {
   const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
+
   for (const cmd of cmds) {
     client.commands.set(cmd.name, cmd);
+
     slashData.push({
       name: cmd.name,
-      description: cmd.description ?? "Nanachi responde."
+      description: cmd.description ?? "Nanachi responde.",
+      options: [
+        {
+          name: "target",
+          description: "Usuario objetivo",
+          type: 6, // USER
+          required: false
+        }
+      ]
     });
   }
 }
@@ -328,33 +332,24 @@ if (fs.existsSync("cmd.json")) {
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
 
-  // 🟢 FORZAR ONLINE INMEDIATO (coso verde)
-  try {
-    await client.user.setPresence({
-      activities: [],
-      status: "online"
-    });
-  } catch (e) {
-    console.error("Initial presence error:", e);
-  }
+  // Presencia base (Discord decide el puntito)
+  client.user.setActivity("Observando el Abismo…", {
+    type: ActivityType.Playing
+  });
 
-  // Registrar slash commands
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
-  try {
-    await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: slashData }
-    );
-    console.log("✅ Slash commands registrados");
-  } catch (e) {
-    console.error("Slash error:", e);
-  }
-
-  // ⏱️ Esperar 10s y luego iniciar estados
-  setTimeout(() => {
-    rotarEstados();
+  // Estados rotatorios constantes
+  if (estados.length) {
     setInterval(rotarEstados, 120000);
-  }, 10000);
+  }
+
+  // Registrar slash
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+  await rest.put(
+    Routes.applicationCommands(CLIENT_ID),
+    { body: slashData }
+  );
+
+  console.log("✅ Slash commands registrados");
 });
 
 // =====================
@@ -375,7 +370,11 @@ client.on(Events.MessageCreate, async message => {
         .setLabel("Aceptar TOS")
         .setStyle(ButtonStyle.Success)
     );
-    return message.reply({ content: tosMessage(), components: [row] });
+
+    return message.reply({
+      content: tosMessage(),
+      components: [row]
+    });
   }
 
   if (message.guild && !tosServers.includes(message.guild.id)) return;
@@ -411,10 +410,12 @@ client.on(Events.InteractionCreate, async interaction => {
     const cmd = client.commands.get(interaction.commandName);
     if (!cmd) return;
 
-    const reply = cmd.reply.replace(
-      "{user}",
-      `<@${interaction.user.id}>`
-    );
+    const target =
+      interaction.options.getUser("target") ?? interaction.user;
+
+    const reply = cmd.reply
+      .replace("{user}", `<@${interaction.user.id}>`)
+      .replace("{target}", `<@${target.id}>`);
 
     return interaction.reply({ content: reply });
   }
