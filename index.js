@@ -68,13 +68,10 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
-// ESTADOS ROTATORIOS (FIX)
+// ESTADOS ROTATORIOS
 // =====================
 const estadosRaw = loadJSON("estados.json", []);
-const estados = Array.isArray(estadosRaw)
-  ? estadosRaw.filter(e => typeof e === "string")
-  : [];
-
+const estados = Array.isArray(estadosRaw) ? estadosRaw.filter(e => typeof e === "string") : [];
 let estadoIndex = 0;
 
 function rotarEstados() {
@@ -87,6 +84,14 @@ function rotarEstados() {
 
   estadoIndex++;
 }
+
+// Al ready
+client.once(Events.ClientReady, async () => {
+  console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+  client.user.setActivity("Observando el Abismo…", { type: ActivityType.Playing });
+
+  if (estados.length) setInterval(rotarEstados, 120000);
+});
 
 // =====================
 // TEXTO
@@ -367,7 +372,16 @@ client.on(Events.MessageCreate, async message => {
   const isDM = !message.guild;
   const call = /\b(nana|nanachi)\b/i;
 
-  if (!isDM && !call.test(message.content)) return;
+  // Si está en servidor y la nombran, responde
+  const shouldReply = isDM || call.test(message.content);
+
+  // Guardamos todo lo que pasa en memoria para contexto, aunque no responda
+  const userHistory = memory.get(message.author.id) ?? [];
+  userHistory.push({ role: "user", content: message.content });
+  memory.set(message.author.id, userHistory.slice(-8));
+
+  // Si no debe responder, terminamos aquí
+  if (!shouldReply) return;
 
   if (!tosUsers.includes(message.author.id)) {
     const row = new ActionRowBuilder().addComponents(
