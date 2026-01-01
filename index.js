@@ -491,17 +491,11 @@ slashData.push({
 // READY
 // =====================
 client.once(Events.ClientReady, async () => {
-console.log(✅ Nanachi conectada como ${client.user.tag});
+  console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+  client.user.setActivity("Observando el Abismo…", { type: ActivityType.Playing });
 
-// Presencia base (Discord decide el puntito)
-client.user.setActivity("Observando el Abismo…", {
-type: ActivityType.Playing
+  if (estados.length) setInterval(rotarEstados, 120000);
 });
-
-// Estados rotatorios constantes
-if (estados.length) {
-setInterval(rotarEstados, 120000);
-}
 
 // Registrar slash
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -610,13 +604,12 @@ const lovemessage =
 loveMessages[Math.floor(Math.random() * loveMessages.length)];
 
 const reply = cmd.reply
-.replace(/{user}/g, <@${interaction.user.id}>)
-.replace(/{target}/g, <@${target.id}>)
-.replace(/{random}/g, ${random})
-.replace(/{lovemessage}/g, lovemessage);
+  .replace(/{user}/g, `<@${interaction.user.id}>`)
+  .replace(/{target}/g, `<@${target.id}>`)
+  .replace(/{random}/g, `${random}`)
+  .replace(/{lovemessage}/g, lovemessage);
 
 return interaction.reply({ content: reply });
-});
 
 // =====================
 // WEB
