@@ -280,7 +280,7 @@ async function longcatAI(content, userId) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: \ Bearer \${LONGCAT_API}\
+        Authorization: `Bearer ${LONGCAT_API}`
       },
       body: JSON.stringify({
         messages: [
@@ -293,7 +293,8 @@ async function longcatAI(content, userId) {
 
     const data = await res.json();
     return data?.choices?.[0]?.message?.content || "Nanachi guarda silencio…";
-  } catch {
+  } catch (err) {
+    console.error("❌ Longcat error:", err);
     return "Nanachi no responde ahora.";
   }
 }
