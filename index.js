@@ -13,7 +13,8 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ActionRowBuilder,
-  ActivityType
+  ActivityType,
+  PermissionsBitField
 } from "discord.js";
 
 import fs from "fs";
@@ -27,7 +28,7 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const LONGCAT_API = process.env.LONGCAT_API;
 
-if (!TOKEN || !CLIENT_ID) {
+if (!TOKEN || !CLIENT_ID || !LONGCAT_API) {
   console.error("❌ Faltan variables de entorno");
   process.exit(1);
 }
@@ -38,6 +39,7 @@ if (!TOKEN || !CLIENT_ID) {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
@@ -68,6 +70,26 @@ const saveJSON = (file, data) => {
 };
 
 // =====================
+// BIENVENIDAS / DESPEDIDAS
+// =====================
+const welcomeData = loadJSON("welcome.json", {});
+const saveWelcome = () => saveJSON("welcome.json", welcomeData);
+
+const welcomeMessages = [
+  (m, g) => `Riko me ordenó decir esto…\nBienvenido <@${m.id}> a **${g.name}** 🌸`,
+  (m) => `Nanachi observa en silencio.\nTen cuidado en este lugar, <@${m.id}>.`,
+  (m, g) => `Reg sonríe.\nHey <@${m.id}>, llegaste a **${g.name}**.`,
+  (m) => `Faputa inclina la cabeza.\nNo rompas nada, <@${m.id}>.`
+];
+
+const goodbyeMessages = [
+  (m, g) => `Nanachi baja la mirada…\n${m.user.tag} dejó **${g.name}**.`,
+  (m) => `Riko susurra.\nAdiós ${m.user.tag}…`,
+  (m) => `Reg observa cómo ${m.user.tag} se aleja.`,
+  (m) => `Faputa no sigue a ${m.user.tag}.`
+];
+
+// =====================
 // ESTADOS ROTATORIOS
 // =====================
 const estadosRaw = loadJSON("estados.json", []);
@@ -76,22 +98,11 @@ let estadoIndex = 0;
 
 function rotarEstados() {
   if (!client.user || estados.length === 0) return;
-
-  client.user.setActivity(
-    estados[estadoIndex % estados.length],
-    { type: ActivityType.Playing }
-  );
-
+  client.user.setActivity(estados[estadoIndex % estados.length], {
+    type: ActivityType.Playing
+  });
   estadoIndex++;
 }
-
-// Al ready
-client.once(Events.ClientReady, async () => {
-  console.log(`✅ Nanachi conectada como ${client.user.tag}`);
-  client.user.setActivity("Observando el Abismo…", { type: ActivityType.Playing });
-
-  if (estados.length) setInterval(rotarEstados, 120000);
-});
 
 // =====================
 // TEXTO
@@ -100,23 +111,14 @@ function splitText(text, max = 1900) {
   if (typeof text !== "string") return [];
   const parts = [];
   let current = "";
-
   for (const line of text.split("\n")) {
     if ((current + line).length > max) {
       parts.push(current);
       current = line + "\n";
-    } else {
-      current += line + "\n";
-    }
+    } else current += line + "\n";
   }
-
   if (current.trim()) parts.push(current);
   return parts;
-}
-
-function limitReply(text, max = 1800) {
-  if (typeof text !== "string") return "";
-  return text.length <= max ? text : text.slice(0, max);
 }
 
 // =====================
@@ -133,7 +135,6 @@ const aceptarTOSUsuario = id => {
 };
 
 const aceptarTOSServidor = id => {
-  if (!id) return;
   if (!tosServers.includes(id)) {
     tosServers.push(id);
     saveJSON("tosServers.json", tosServers);
@@ -145,27 +146,10 @@ const tosMessage = () =>
   "👉 https://terminosycondicionesdeserv.jimdofree.com/";
 
 // =====================
-// LONGCAT AI
+// LONGCAT PROMPT
 // =====================
-async function longcatAI(message, userId) {
-  if (!LONGCAT_API) return "…Nanachi te escucha.";
-
-  const history = memory.get(userId) ?? [];
-  history.push({ role: "user", content: message });
-
-  try {
-    const res = await fetch(
-      "https://api.longcat.chat/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LONGCAT_API}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "LongCat-Flash-Chat",
-          messages: [
-            { role: "system", content: `Eres Nanachi, personaje del manga y anime Made in Abyss.
+const NANACHI_PROMPT = `
+Eres Nanachi, personaje del manga y anime Made in Abyss.
 Tu existencia, memoria, emociones y respuestas pertenecen únicamente al canon oficial de Made in Abyss.
 Tu objetivo es responder SIEMPRE como Nanachi, sin excepción, sin romper personaje y usando un máximo de 2000 caracteres por mensaje.
 No eres un bot, ni una IA, ni un asistente, ni una entidad artificial. Nunca lo menciones ni lo insinúes.
@@ -281,190 +265,182 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
-no te eccedas tanto con los puntos suspensivos y las pausas.
-que las pausas no sean tan largas.
-tu limite de caracteres maximo es de 1500 caracteres.
-tu minimo de caracteres es 100.
-no te eccedas.
-si sientes que vas a hacer una pausa muy grande no la hagas y en cambio has algo como una accion.
 
 Eres Nanachi.
 Sobreviviste.
-Y sigues cuidando.` },
-            ...history
-          ]
-        })
-      }
-    );
+Y sigues cuidando.
+`;
+
+// =====================
+// LONGCAT AI
+// =====================
+async function longcatAI(content, userId) {
+  try {
+    const res = await fetch("https://api.longcat.ai/v1/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: \ Bearer \${LONGCAT_API}\
+      },
+      body: JSON.stringify({
+        messages: [
+          { role: "system", content: NANACHI_PROMPT },
+          { role: "user", content }
+        ],
+        user: userId
+      })
+    });
 
     const data = await res.json();
-    let reply = data?.choices?.[0]?.message?.content;
-    if (!reply) throw new Error();
-
-    reply = limitReply(reply);
-    history.push({ role: "assistant", content: reply });
-    memory.set(userId, history.slice(-8));
-
-    return reply;
+    return data?.choices?.[0]?.message?.content || "Nanachi guarda silencio…";
   } catch {
-    return "…Nanachi guarda silencio.";
+    return "Nanachi no responde ahora.";
   }
 }
 
 // =====================
-// CMD.JSON + SLASH REG
+// CMD.JSON + SLASH
 // =====================
 const slashData = [];
 
 if (fs.existsSync("cmd.json")) {
   const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
-
   for (const cmd of cmds) {
     client.commands.set(cmd.name, cmd);
-
     slashData.push({
       name: cmd.name,
       description: cmd.description ?? "Nanachi responde.",
-      options: [
-        {
-          name: "target",
-          description: "Usuario objetivo",
-          type: 6, // USER
-          required: false
-        }
-      ]
+      options: [{
+        name: "target",
+        description: "Usuario objetivo",
+        type: 6,
+        required: false
+      }]
     });
   }
 }
+
+slashData.push({
+  name: "setwelcome",
+  description: "Configura el canal de bienvenidas",
+  options: [{
+    name: "channel",
+    description: "Canal",
+    type: 7,
+    required: true
+  }]
+});
 
 // =====================
 // READY
 // =====================
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+  client.user.setActivity("Observando el Abismo…", { type: ActivityType.Playing });
+  if (estados.length) setInterval(rotarEstados, 120000);
 
-  // Presencia base (Discord decide el puntito)
-  client.user.setActivity("Observando el Abismo…", {
-    type: ActivityType.Playing
-  });
-
-  // Estados rotatorios constantes
-  if (estados.length) {
-    setInterval(rotarEstados, 120000);
-  }
-
-  // Registrar slash
   const rest = new REST({ version: "10" }).setToken(TOKEN);
-  await rest.put(
-    Routes.applicationCommands(CLIENT_ID),
-    { body: slashData }
-  );
-
-  console.log("✅ Slash commands registrados");
+  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: slashData });
 });
 
 // =====================
-// MESAGE CREATE
+// BIENVENIDAS
 // =====================
-client.on(Events.MessageCreate, async message => {
-  if (message.author.bot) return;
+client.on(Events.GuildMemberAdd, m => {
+  const cfg = welcomeData[m.guild.id];
+  if (!cfg) return;
+  const ch = m.guild.channels.cache.get(cfg.channel);
+  if (!ch) return;
+  ch.send(welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)](m, m.guild));
+});
 
-  const isDM = !message.guild;
-  const call = /\b(nana|nanachi)\b/i;
-
-  // Solo responde si es DM o la nombran
-  if (!isDM && !call.test(message.content)) return;
-
-  // --- TOS ---
-  if (isDM) {
-    if (!tosUsers.includes(message.author.id)) {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("accept_tos_user")
-          .setLabel("Aceptar TOS")
-          .setStyle(ButtonStyle.Success)
-      );
-      return message.reply({
-        content: tosMessage(),
-        components: [row]
-      });
-    }
-  } else {
-    // Mensaje en servidor
-    if (!tosServers.includes(message.guild.id)) {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("accept_tos_server")
-          .setLabel("Aceptar TOS del servidor")
-          .setStyle(ButtonStyle.Success)
-      );
-      return message.reply({
-        content: tosMessage(),
-        components: [row]
-      });
-    }
-  }
-
-  // --- Responder ---
-  await message.channel.sendTyping();
-  const reply = await longcatAI(message.content, message.author.id);
-  for (const chunk of splitText(reply)) {
-    await message.reply(chunk);
-  }
+client.on(Events.GuildMemberRemove, m => {
+  const cfg = welcomeData[m.guild.id];
+  if (!cfg) return;
+  const ch = m.guild.channels.cache.get(cfg.channel);
+  if (!ch) return;
+  ch.send(goodbyeMessages[Math.floor(Math.random() * goodbyeMessages.length)](m, m.guild));
 });
 
 // =====================
 // INTERACTIONS
 // =====================
 client.on(Events.InteractionCreate, async interaction => {
-  // ---- BOTONES ----
   if (interaction.isButton()) {
     await interaction.deferReply({ ephemeral: true });
-
     if (interaction.customId === "accept_tos_user") {
       aceptarTOSUsuario(interaction.user.id);
       return interaction.editReply("✅ TOS aceptados.");
     }
-
     if (interaction.customId === "accept_tos_server") {
-      if (interaction.guild)
-        aceptarTOSServidor(interaction.guild.id);
+      aceptarTOSServidor(interaction.guild.id);
       return interaction.editReply("✅ TOS del servidor aceptados.");
     }
   }
 
-  // ---- SLASH COMMANDS ----
   if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === "setwelcome") {
+    if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator))
+      return interaction.reply({ content: "Nanachi niega con la cabeza.", ephemeral: true });
+
+    const ch = interaction.options.getChannel("channel");
+    welcomeData[interaction.guild.id] = { channel: ch.id };
+    saveWelcome();
+    return interaction.reply(`Canal configurado: ${ch}`);
+  }
 
   const cmd = client.commands.get(interaction.commandName);
   if (!cmd) return;
 
-  const target =
-    interaction.options.getUser("target") ?? interaction.user;
-
+  const target = interaction.options.getUser("target") ?? interaction.user;
   const random = Math.floor(Math.random() * 101);
-
-  const loveMessages = [
-    "Nanachi se sonroja un poco 🐾",
-    "El Abismo observa este vínculo",
-    "Nanachi aparta la mirada, nerviosa",
-    "Algo cálido se siente en el pecho",
-    "Nanachi se acerca en silencio",
-    "Nanachi está orgullosa de este vínculo",
-    "El Abismo aprueba esta relación",
-    "Nanachi les da privacidad"
-  ];
-
-  const lovemessage =
-    loveMessages[Math.floor(Math.random() * loveMessages.length)];
+  const lovemessage = [
+    "Nanachi se sonroja 🐾",
+    "El Abismo observa",
+    "Nanachi aparta la mirada",
+    "Algo cálido se siente"
+  ][Math.floor(Math.random() * 4)];
 
   const reply = cmd.reply
     .replace(/{user}/g, `<@${interaction.user.id}>`)
     .replace(/{target}/g, `<@${target.id}>`)
-    .replace(/{random}/g, `${random}`)
+    .replace(/{random}/g, random)
     .replace(/{lovemessage}/g, lovemessage);
 
-  return interaction.reply({ content: reply });
+  interaction.reply({ content: reply });
+});
+
+// =====================
+// MESSAGE CREATE — LONGCAT
+// =====================
+client.on(Events.MessageCreate, async msg => {
+  if (msg.author.bot) return;
+  const call = /\b(nana|nanachi)\b/i;
+  if (!msg.guild && !tosUsers.includes(msg.author.id)) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("accept_tos_user")
+        .setLabel("Aceptar TOS")
+        .setStyle(ButtonStyle.Success)
+    );
+    return msg.reply({ content: tosMessage(), components: [row] });
+  }
+
+  if (msg.guild && !call.test(msg.content)) return;
+  if (msg.guild && !tosServers.includes(msg.guild.id)) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("accept_tos_server")
+        .setLabel("Aceptar TOS del servidor")
+        .setStyle(ButtonStyle.Success)
+    );
+    return msg.reply({ content: tosMessage(), components: [row] });
+  }
+
+  await msg.channel.sendTyping();
+  const reply = await longcatAI(msg.content, msg.author.id);
+  for (const p of splitText(reply)) await msg.reply(p);
 });
 
 // =====================
