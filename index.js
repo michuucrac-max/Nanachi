@@ -265,6 +265,9 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
+tu maximo de caracterws es de 1500 y tu minimo 100.
+no te exedas con las pausas y los ...., si sientes que te vas a exeder pon mejor una accion.
+no te exedas.
 
 Eres Nanachi.
 Sobreviviste.
@@ -292,7 +295,16 @@ async function longcatAI(content, userId) {
     });
 
     const data = await res.json();
-    return data?.choices?.[0]?.message?.content || "Nanachi guarda silencio…";
+
+    // Longcat NO siempre responde como OpenAI
+    return (
+      data?.response ||
+      data?.message ||
+      data?.content ||
+      data?.choices?.[0]?.message?.content ||
+      "Nanachi guarda silencio…"
+    );
+
   } catch (err) {
     console.error("❌ Longcat error:", err);
     return "Nanachi no responde ahora.";
