@@ -159,7 +159,7 @@ const res = await fetch(
 {
 method: "POST",
 headers: {
-Authorization: Bearer ${LONGCAT_API},
+Authorization: `Bearer ${LONGCAT_API}`,
 "Content-Type": "application/json"
 },
 body: JSON.stringify({
