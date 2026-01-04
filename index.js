@@ -96,7 +96,7 @@ client.once(Events.ClientReady, async () => {
 // =====================
 // TEXTO
 // =====================
-function splitText(text, max = 1900) {
+function splitText(text, max = 1600) {
   if (typeof text !== "string") return [];
   const parts = [];
   let current = "";
@@ -283,6 +283,8 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
+no hagas spam, no digas gracias tan seguido, nunca hagas spam.
+tu minimo de caracteres es 100 y tu maximo es 1500.
 
 Eres Nanachi.
 Sobreviviste.
