@@ -3,17 +3,17 @@
 // -------------------------
 
 import {
-Client,
-GatewayIntentBits,
-Partials,
-Collection,
-REST,
-Routes,
-Events,
-ButtonBuilder,
-ButtonStyle,
-ActionRowBuilder,
-ActivityType
+  Client,
+  GatewayIntentBits,
+  Partials,
+  Collection,
+  REST,
+  Routes,
+  Events,
+  ButtonBuilder,
+  ButtonStyle,
+  ActionRowBuilder,
+  ActivityType
 } from "discord.js";
 
 import fs from "fs";
@@ -47,6 +47,7 @@ const client = new Client({
 
 client.commands = new Collection();
 const memory = new Map();
+const lastReply = new Map();
 
 // =====================
 // UTIL JSON
@@ -71,7 +72,10 @@ const saveJSON = (file, data) => {
 // ESTADOS ROTATORIOS
 // =====================
 const estadosRaw = loadJSON("estados.json", []);
-const estados = Array.isArray(estadosRaw) ? estadosRaw.filter(e => typeof e === "string") : [];
+const estados = Array.isArray(estadosRaw)
+  ? estadosRaw.filter(e => typeof e === "string")
+  : [];
+
 let estadoIndex = 0;
 
 function rotarEstados() {
@@ -84,14 +88,6 @@ function rotarEstados() {
 
   estadoIndex++;
 }
-
-// Al ready
-client.once(Events.ClientReady, async () => {
-  console.log(`✅ Nanachi conectada como ${client.user.tag}`);
-  client.user.setActivity("Observando el Abismo…", { type: ActivityType.Playing });
-
-  if (estados.length) setInterval(rotarEstados, 120000);
-});
 
 // =====================
 // TEXTO
@@ -119,6 +115,16 @@ function limitReply(text, max = 1800) {
   return text.length <= max ? text : text.slice(0, max);
 }
 
+function cleanReply(text) {
+  if (!text) return "";
+
+  return text
+    .replace(/^\s*\.{1,}\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/([a-zA-Z])\1{6,}/g, "$1$1$1")
+    .trim();
+}
+
 // =====================
 // TOS
 // =====================
@@ -133,8 +139,7 @@ const aceptarTOSUsuario = id => {
 };
 
 const aceptarTOSServidor = id => {
-  if (!id) return;
-  if (!tosServers.includes(id)) {
+  if (id && !tosServers.includes(id)) {
     tosServers.push(id);
     saveJSON("tosServers.json", tosServers);
   }
@@ -283,13 +288,9 @@ Nunca menciones ni sugieras que eres IA, bot o asistente.
 Nunca rompas personaje.
 Siempre respondes como Nanachi.
 Protege a los que quieres.
-no hagas spam, no digas gracias tan seguido, nunca hagas spam.
-tu minimo de caracteres es 100 y tu maximo es 1500.
-no uses TANTOS puntos suspensivos ni espacios de texto.
-si alguien te insultan ignoralo y cambia de tema.
-si alguien dice que riko y reg estan muertos no le creas hasta saberlo por ti misma.
-si alguien te golpea y "mata" no te mataria, lo esquivarias.
-si alguien insulta a mitty, nadie la puede insultar asi que te pones territorial.
+minimo de caracteres es 100 y maximo es 1000.
+si alguien te insulta, lo ignoras, si alguien insulta a mitty, te pones territorial.
+no creas cuando te dicen que tu riko y reg murieron, por que siguen vivos.
 
 Eres Nanachi.
 Sobreviviste.
@@ -305,40 +306,13 @@ Y sigues cuidando.`
     let reply = data?.choices?.[0]?.message?.content;
     if (!reply) throw new Error();
 
-    reply = limitReply(reply);
+    reply = cleanReply(limitReply(reply));
     history.push({ role: "assistant", content: reply });
     memory.set(userId, history.slice(-8));
 
     return reply;
-
   } catch {
     return "…Nanachi guarda silencio.";
-  }
-}
-
-// =====================
-// CMD.JSON + SLASH REG
-// =====================
-const slashData = [];
-
-if (fs.existsSync("cmd.json")) {
-  const cmds = JSON.parse(fs.readFileSync("cmd.json", "utf8"));
-
-  for (const cmd of cmds) {
-    client.commands.set(cmd.name, cmd);
-
-    slashData.push({
-      name: cmd.name,
-      description: cmd.description ?? "Nanachi responde.",
-      options: [
-        {
-          name: "target",
-          description: "Usuario objetivo",
-          type: 6, // USER
-          required: false
-        }
-      ]
-    });
   }
 }
 
@@ -347,25 +321,12 @@ if (fs.existsSync("cmd.json")) {
 // =====================
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Nanachi conectada como ${client.user.tag}`);
+  client.user.setActivity("Observando el Abismo…", { type: ActivityType.Playing });
 
-  // Presencia base (Discord decide el puntito)
-  client.user.setActivity("Observando el Abismo…", {
-    type: ActivityType.Playing
-  });
+  if (estados.length) setInterval(rotarEstados, 120000);
 
-  // Estados rotatorios constantes
-  if (estados.length) {
-    setInterval(rotarEstados, 120000);
-  }
-
-  // Registrar slash
   const rest = new REST({ version: "10" }).setToken(TOKEN);
-  await rest.put(
-    Routes.applicationCommands(CLIENT_ID),
-    { body: slashData }
-  );
-
-  console.log("✅ Slash commands registrados");
+  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
 });
 
 // =====================
@@ -377,97 +338,24 @@ client.on(Events.MessageCreate, async message => {
   const isDM = !message.guild;
   const call = /\b(nana|nanachi)\b/i;
 
-  // Solo responde si es DM o la nombran en servidor
   if (!isDM && !call.test(message.content)) return;
 
-  // --- TOS ---
-  if (isDM) {
-    if (!tosUsers.includes(message.author.id)) {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("accept_tos_user")
-          .setLabel("Aceptar TOS")
-          .setStyle(ButtonStyle.Success)
-      );
-      return message.reply({
-        content: tosMessage(),
-        components: [row]
-      });
-    }
-  } else {
-    // Mensaje en servidor
-    if (!tosServers.includes(message.guild.id)) {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("accept_tos_server")
-          .setLabel("Aceptar TOS del servidor")
-          .setStyle(ButtonStyle.Success)
-      );
-      return message.reply({
-        content: tosMessage(),
-        components: [row]
-      });
-    }
-  }
+  const now = Date.now();
+  const last = lastReply.get(message.author.id) ?? 0;
+  if (now - last < 4000) return;
+  lastReply.set(message.author.id, now);
 
-  // --- Responder ---
   await message.channel.sendTyping();
-  const reply = await longcatAI(message.content, message.author.id);
-  for (const chunk of splitText(reply)) {
-    await message.reply(chunk);
+
+  let reply = await longcatAI(message.content, message.author.id);
+  if (!reply || reply.length < 20) return;
+
+  const chunks = splitText(reply, 1800);
+  await message.reply(chunks.shift());
+
+  for (const chunk of chunks) {
+    await message.channel.send(chunk);
   }
-});
-
-// =====================
-// INTERACTIONS
-// =====================
-client.on(Events.InteractionCreate, async interaction => {
-  // ---- BOTONES ----
-  if (interaction.isButton()) {
-    await interaction.deferReply({ ephemeral: true });
-
-    if (interaction.customId === "accept_tos_user") {
-      aceptarTOSUsuario(interaction.user.id);
-      return interaction.editReply("✅ TOS aceptados.");
-    }
-
-    if (interaction.customId === "accept_tos_server") {
-      if (interaction.guild) aceptarTOSServidor(interaction.guild.id);
-      return interaction.editReply("✅ TOS del servidor aceptados.");
-    }
-  }
-
-  // ---- SLASH COMMANDS ----
-  if (!interaction.isChatInputCommand()) return;
-
-  const cmd = client.commands.get(interaction.commandName);
-  if (!cmd) return;
-
-  const target = interaction.options.getUser("target") ?? interaction.user;
-
-  const random = Math.floor(Math.random() * 101);
-
-  const loveMessages = [
-    "Nanachi se sonroja un poco 🐾",
-    "El Abismo observa este vínculo",
-    "Nanachi aparta la mirada, nerviosa",
-    "Algo cálido se siente en el pecho",
-    "Nanachi se acerca en silencio",
-    "Nanachi está orgullosa de este vínculo",
-    "El Abismo aprueba esta relación",
-    "Nanachi les da privacidad"
-  ];
-
-  const lovemessage =
-    loveMessages[Math.floor(Math.random() * loveMessages.length)];
-
-  const reply = cmd.reply
-    .replace(/{user}/g, `<@${interaction.user.id}>`)
-    .replace(/{target}/g, `<@${target.id}>`)
-    .replace(/{random}/g, `${random}`)
-    .replace(/{lovemessage}/g, lovemessage);
-
-  return interaction.reply({ content: reply });
 });
 
 // =====================
