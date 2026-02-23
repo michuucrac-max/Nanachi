@@ -813,7 +813,7 @@ client.on(Events.MessageCreate, async message => {
 });
 
 // =====================
-// WEB
+// LA WEB
 // =====================
 http.createServer((_, res) => {
   res.writeHead(200);
