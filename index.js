@@ -1,13 +1,10 @@
-// ================================
-// NANACHI — IA FIX RENDER
-// ================================
-
-import dns from "dns";
-dns.setDefaultResultOrder("ipv4first");
-
+// =====================
+// IMPORTS (IGUAL QUE EL BOT QUE FUNCIONA)
+// =====================
 import {
   Client,
   GatewayIntentBits,
+  Partials,
   Events,
   ActivityType
 } from "discord.js";
@@ -21,33 +18,23 @@ const TOKEN = process.env.TOKEN;
 const LONGCAT_API = process.env.LONGCAT_API;
 const PORT = process.env.PORT || 3000;
 
-if (!TOKEN) {
-  console.error("❌ TOKEN faltante");
-  process.exit(1);
-}
-
 // =====================
 // EXPRESS (CLAVE)
 // =====================
 const app = express();
-
-app.get("/", (_, res) => {
-  res.send("Nanachi viva...");
-});
-
-app.listen(PORT, () => {
-  console.log("🌐 Express activo en", PORT);
-});
+app.get("/", (_, res) => res.send("Nanachi observa el Abismo…"));
+app.listen(PORT, () => console.log(`🌐 Express activo en ${PORT}`));
 
 // =====================
-// CLIENT
+// CLIENT (MISMA CONFIG QUE FUNCIONA)
 // =====================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  partials: [Partials.Channel]
 });
 
 // =====================
@@ -65,30 +52,30 @@ const estados = [
   "Cuidando lo que queda…"
 ];
 
-let i = 0;
+let estadoIndex = 0;
 
-function estado() {
+function setEstado() {
   if (!client.user) return;
 
   client.user.setPresence({
     status: "online",
     activities: [{
-      name: estados[i % estados.length],
+      name: estados[estadoIndex % estados.length],
       type: ActivityType.Playing
     }]
   });
 
-  i++;
+  estadoIndex++;
 }
 
 // =====================
-// IA
+// IA (MISMA LÓGICA PERO LIMPIA)
 // =====================
-async function getAI(msg, id) {
+async function getAI(msg, userId) {
   if (!LONGCAT_API) return "…";
 
-  const hist = memory.get(id) ?? [];
-  hist.push({ role: "user", content: msg });
+  const history = memory.get(userId) ?? [];
+  history.push({ role: "user", content: msg });
 
   try {
     const res = await fetch(
@@ -104,9 +91,14 @@ async function getAI(msg, id) {
           messages: [
             {
               role: "system",
-              content: "Eres Nanachi. Hablas poco, con pausas..."
+              content: `
+Eres Nanachi de Made in Abyss.
+Hablas poco, con pausas "..."
+Eres calmada y observadora.
+Nunca dices que eres IA.
+`
             },
-            ...hist
+            ...history
           ]
         })
       }
@@ -115,13 +107,14 @@ async function getAI(msg, id) {
     const data = await res.json();
     const reply = data?.choices?.[0]?.message?.content || "…";
 
-    hist.push({ role: "assistant", content: reply });
-    memory.set(id, hist.slice(-6));
+    history.push({ role: "assistant", content: reply });
+    memory.set(userId, history.slice(-6));
 
     return reply;
 
-  } catch {
-    return "…";
+  } catch (err) {
+    console.error("❌ IA ERROR:", err);
+    return "…Nanachi guarda silencio.";
   }
 }
 
@@ -129,30 +122,35 @@ async function getAI(msg, id) {
 // READY
 // =====================
 client.once(Events.ClientReady, () => {
-  console.log("✅ Conectado como", client.user.tag);
+  console.log(`🟢 Nanachi despierta como ${client.user.tag}`);
 
-  estado();
-  setInterval(estado, 120000);
+  setEstado();
+  setInterval(setEstado, 120000);
 });
 
 // =====================
-// MENSAJES
+// MENSAJES (MODO ACTIVO)
 // =====================
-client.on(Events.MessageCreate, async msg => {
-  if (msg.author.bot) return;
+client.on(Events.MessageCreate, async message => {
+  try {
+    if (message.author.bot) return;
 
-  const now = Date.now();
-  const last = cooldown.get(msg.author.id) || 0;
+    const now = Date.now();
+    const last = cooldown.get(message.author.id) || 0;
 
-  if (now - last < 4000) return;
-  cooldown.set(msg.author.id, now);
+    if (now - last < 4000) return;
+    cooldown.set(message.author.id, now);
 
-  await msg.channel.sendTyping();
+    await message.channel.sendTyping();
 
-  const reply = await getAI(msg.content, msg.author.id);
+    const reply = await getAI(message.content, message.author.id);
 
-  if (reply) {
-    await msg.reply(reply);
+    if (reply) {
+      await message.reply(reply);
+    }
+
+  } catch (err) {
+    console.error("❌ MSG ERROR:", err);
   }
 });
 
