@@ -10,19 +10,23 @@ import {
   ActivityType
 } from "discord.js";
 
-import fetch from "node-fetch";
 import http from "http";
 
 // =====================
-// ENV
+// ENV (SIN DOTENV)
 // =====================
 const TOKEN = process.env.TOKEN;
 const LONGCAT_API = process.env.LONGCAT_API;
+const PORT = process.env.PORT || 3000;
 
 if (!TOKEN) {
-  console.error("❌ Falta el TOKEN");
+  console.error("❌ Falta el TOKEN en variables de entorno");
   process.exit(1);
 }
+
+console.log("✅ Iniciando bot...");
+console.log("TOKEN:", TOKEN ? "OK" : "MISSING");
+console.log("LONGCAT_API:", LONGCAT_API ? "OK" : "MISSING");
 
 // =====================
 // CLIENT
@@ -127,10 +131,12 @@ Nunca rompes personaje.
     let reply = data?.choices?.[0]?.message?.content || "…";
 
     history.push({ role: "assistant", content: reply });
-    memory.set(userId, history.slice(-6)); // guarda últimos mensajes
+    memory.set(userId, history.slice(-6));
 
     return reply;
-  } catch {
+
+  } catch (err) {
+    console.error("❌ AI ERROR:", err);
     return "…Nanachi guarda silencio.";
   }
 }
@@ -149,20 +155,26 @@ client.once(Events.ClientReady, () => {
 // MENSAJES
 // =====================
 client.on(Events.MessageCreate, async message => {
-  if (message.author.bot) return;
+  try {
+    if (message.author.bot) return;
 
-  // cooldown 4s
-  const now = Date.now();
-  const last = cooldown.get(message.author.id) || 0;
-  if (now - last < 4000) return;
-  cooldown.set(message.author.id, now);
+    const now = Date.now();
+    const last = cooldown.get(message.author.id) || 0;
 
-  await message.channel.sendTyping();
+    if (now - last < 4000) return;
+    cooldown.set(message.author.id, now);
 
-  const reply = await getAIResponse(message.content, message.author.id);
-  if (!reply) return;
+    await message.channel.sendTyping();
 
-  await message.reply(reply);
+    const reply = await getAIResponse(message.content, message.author.id);
+
+    if (reply) {
+      await message.reply(reply);
+    }
+
+  } catch (err) {
+    console.error("❌ MESSAGE ERROR:", err);
+  }
 });
 
 // =====================
@@ -171,7 +183,9 @@ client.on(Events.MessageCreate, async message => {
 http.createServer((_, res) => {
   res.writeHead(200);
   res.end("Nanachi viva.");
-}).listen(process.env.PORT || 3000);
+}).listen(PORT, () => {
+  console.log(`🌐 Servidor activo en puerto ${PORT}`);
+});
 
 // =====================
 // LOGIN
