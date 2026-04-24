@@ -1,7 +1,3 @@
-// -------------------------
-//  NANACHI — FULL BOT
-// -------------------------
-
 import {
   Client,
   GatewayIntentBits,
@@ -13,20 +9,16 @@ import {
 import http from "http";
 
 // =====================
-// ENV (SIN DOTENV)
+// ENV (RENDER)
 // =====================
 const TOKEN = process.env.TOKEN;
 const LONGCAT_API = process.env.LONGCAT_API;
 const PORT = process.env.PORT || 3000;
 
 if (!TOKEN) {
-  console.error("❌ Falta el TOKEN en variables de entorno");
+  console.error("❌ TOKEN no encontrado en Render env");
   process.exit(1);
 }
-
-console.log("✅ Iniciando bot...");
-console.log("TOKEN:", TOKEN ? "OK" : "MISSING");
-console.log("LONGCAT_API:", LONGCAT_API ? "OK" : "MISSING");
 
 // =====================
 // CLIENT
@@ -41,7 +33,7 @@ const client = new Client({
 });
 
 // =====================
-// MEMORIA + COOLDOWN
+// MEMORIA
 // =====================
 const memory = new Map();
 const cooldown = new Map();
@@ -55,38 +47,44 @@ const estados = [
   "Cuidando lo que queda…"
 ];
 
-let estadoIndex = 0;
+let i = 0;
 
-function setPresence(text) {
+function presence() {
   if (!client.user) return;
 
   client.user.setPresence({
     status: "online",
-    activities: [
-      {
-        name: text,
-        type: ActivityType.Playing
-      }
-    ]
+    activities: [{
+      name: estados[i % estados.length],
+      type: ActivityType.Playing
+    }]
   });
+
+  i++;
 }
 
-function rotarEstados() {
-  setPresence(estados[estadoIndex % estados.length]);
-  estadoIndex++;
+// =====================
+// FETCH SAFE (IMPORTANTE)
+// =====================
+async function safeFetch(url, options) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 // =====================
 // IA
 // =====================
-async function getAIResponse(message, userId) {
+async function getAI(msg, id) {
   if (!LONGCAT_API) return "…";
 
-  const history = memory.get(userId) ?? [];
-  history.push({ role: "user", content: message });
+  const hist = memory.get(id) ?? [];
+  hist.push({ role: "user", content: msg });
 
   try {
-    const res = await fetch(
+    const data = await safeFetch(
       "https://api.longcat.chat/openai/v1/chat/completions",
       {
         method: "POST",
@@ -99,56 +97,35 @@ async function getAIResponse(message, userId) {
           messages: [
             {
               role: "system",
-              content: `
-Eres Nanachi de Made in Abyss.
-
-Historia:
-Nanachi fue humana y vivía en Orth.
-Fue llevada a Idofront por Bondrewd, donde conoció a Mitty.
-
-Ambas fueron sometidas a un experimento en la sexta capa.
-Nanachi sobrevivió como narehate con la bendición.
-Mitty quedó atrapada en un cuerpo inmortal.
-
-Nanachi la cuidó durante años...
-hasta que la liberó de su sufrimiento.
-
-Personalidad:
-Hablas poco, con pausas "..."
-Eres calmada, observadora y protectora.
-No usas emojis.
-Nunca dices que eres una IA.
-Nunca rompes personaje.
-`
+              content: "Eres Nanachi de Made in Abyss..."
             },
-            ...history
+            ...hist
           ]
         })
       }
     );
 
-    const data = await res.json();
-    let reply = data?.choices?.[0]?.message?.content || "…";
+    const reply = data?.choices?.[0]?.message?.content || "…";
 
-    history.push({ role: "assistant", content: reply });
-    memory.set(userId, history.slice(-6));
+    hist.push({ role: "assistant", content: reply });
+    memory.set(id, hist.slice(-6));
 
     return reply;
 
   } catch (err) {
-    console.error("❌ AI ERROR:", err);
-    return "…Nanachi guarda silencio.";
+    console.error("❌ IA ERROR:", err);
+    return "…";
   }
 }
 
 // =====================
-// READY
+// READY (CRÍTICO)
 // =====================
 client.once(Events.ClientReady, () => {
-  console.log(`✅ Conectado como ${client.user.tag}`);
+  console.log("🔥 CONECTADO COMO:", client.user.tag);
 
-  setPresence(estados[0]);
-  setInterval(rotarEstados, 120000);
+  presence();
+  setInterval(presence, 120000);
 });
 
 // =====================
@@ -166,28 +143,28 @@ client.on(Events.MessageCreate, async message => {
 
     await message.channel.sendTyping();
 
-    const reply = await getAIResponse(message.content, message.author.id);
+    const reply = await getAI(message.content, message.author.id);
 
-    if (reply) {
-      await message.reply(reply);
-    }
+    await message.reply(reply);
 
   } catch (err) {
-    console.error("❌ MESSAGE ERROR:", err);
+    console.error("❌ MSG ERROR:", err);
   }
 });
 
 // =====================
-// WEB SERVER (KEEP ALIVE)
+// KEEP ALIVE RENDER
 // =====================
 http.createServer((_, res) => {
   res.writeHead(200);
-  res.end("Nanachi viva.");
+  res.end("Nanachi activa");
 }).listen(PORT, () => {
-  console.log(`🌐 Servidor activo en puerto ${PORT}`);
+  console.log("🌐 Server en puerto", PORT);
 });
 
 // =====================
-// LOGIN
+// LOGIN (CRÍTICO)
 // =====================
-client.login(TOKEN);
+client.login(TOKEN).catch(err => {
+  console.error("❌ LOGIN ERROR:", err);
+});
