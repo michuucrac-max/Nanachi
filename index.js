@@ -1,37 +1,34 @@
-// ================================
-// NANACHI BOT — DEBUG TOTAL
-// ================================
-
 console.log("🚨 INICIANDO PROCESO...");
 
 import {
   Client,
   GatewayIntentBits,
-  Events,
-  ActivityType
+  Events
 } from "discord.js";
 
 import http from "http";
 
-// =====================
-// VARIABLES (RENDER)
-// =====================
+// ===== DEBUG GLOBAL =====
+process.on("unhandledRejection", err => {
+  console.error("❌ UNHANDLED:", err);
+});
+
+process.on("uncaughtException", err => {
+  console.error("❌ EXCEPTION:", err);
+});
+
+// ===== ENV =====
 const TOKEN = process.env.TOKEN;
 const PORT = process.env.PORT || 3000;
 
 console.log("🔎 TOKEN:", TOKEN ? "OK" : "NO");
 
-// =====================
-// VALIDACIÓN TOKEN
-// =====================
 if (!TOKEN) {
-  console.error("❌ TOKEN NO DEFINIDO EN RENDER");
+  console.error("❌ SIN TOKEN");
   process.exit(1);
 }
 
-// =====================
-// CLIENT
-// =====================
+// ===== CLIENT =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -40,56 +37,32 @@ const client = new Client({
   ]
 });
 
-// =====================
-// READY
-// =====================
+// 🔥 DEBUG INTERNO DISCORD
+client.on("debug", msg => console.log("📡 DEBUG:", msg));
+client.on("error", err => console.error("❌ CLIENT ERROR:", err));
+client.on("shardError", err => console.error("❌ SHARD ERROR:", err));
+
+// ===== READY =====
 client.once(Events.ClientReady, () => {
-  console.log("✅ BOT CONECTADO COMO:", client.user.tag);
-
-  client.user.setPresence({
-    status: "online",
-    activities: [
-      {
-        name: "Observando el Abismo…",
-        type: ActivityType.Playing
-      }
-    ]
-  });
+  console.log("✅ CONECTADO COMO:", client.user.tag);
 });
 
-// =====================
-// MENSAJES (RESPUESTA SIMPLE)
-// =====================
-client.on(Events.MessageCreate, async (msg) => {
-  try {
-    if (msg.author.bot) return;
-
-    console.log("📩 MENSAJE:", msg.content);
-
-    if (msg.mentions.has(client.user)) {
-      await msg.reply("…Estoy aquí.");
-    }
-
-  } catch (err) {
-    console.error("❌ ERROR EN MENSAJE:", err);
-  }
+// ===== MENSAJES =====
+client.on(Events.MessageCreate, msg => {
+  if (msg.author.bot) return;
+  msg.reply("…Estoy viva.");
 });
 
-// =====================
-// KEEP ALIVE (RENDER)
-// =====================
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("Bot activo");
+// ===== SERVER =====
+http.createServer((_, res) => {
+  res.end("OK");
 }).listen(PORT, () => {
-  console.log("🌐 WEB SERVER OK EN PUERTO", PORT);
+  console.log("🌐 WEB OK");
 });
 
-// =====================
-// LOGIN
-// =====================
-console.log("🔵 INTENTANDO LOGIN...");
+// ===== LOGIN =====
+console.log("🔵 LOGIN...");
 
 client.login(TOKEN)
-  .then(() => console.log("🟢 LOGIN EXITOSO"))
+  .then(() => console.log("🟢 LOGIN OK"))
   .catch(err => console.error("🔴 LOGIN ERROR:", err));
