@@ -1,5 +1,8 @@
 console.log("🚨 INICIANDO PROCESO...");
 
+import dns from "dns";
+dns.setDefaultResultOrder("ipv4first");
+
 import {
   Client,
   GatewayIntentBits,
