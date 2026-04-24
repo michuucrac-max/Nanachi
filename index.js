@@ -1,8 +1,7 @@
 // ================================
-// NANACHI — MODERN BOT (2026)
+// NANACHI — IA FIX RENDER
 // ================================
 
-// 🔥 FIX RED (IMPORTANTE)
 import dns from "dns";
 dns.setDefaultResultOrder("ipv4first");
 
@@ -13,7 +12,7 @@ import {
   ActivityType
 } from "discord.js";
 
-import http from "http";
+import express from "express";
 
 // =====================
 // ENV
@@ -27,31 +26,29 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-console.log("🔵 Iniciando Nanachi...");
+// =====================
+// EXPRESS (CLAVE)
+// =====================
+const app = express();
+
+app.get("/", (_, res) => {
+  res.send("Nanachi viva...");
+});
+
+app.listen(PORT, () => {
+  console.log("🌐 Express activo en", PORT);
+});
 
 // =====================
-// CLIENT (ACTUALIZADO)
+// CLIENT
 // =====================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ],
-  presence: {
-    status: "online",
-    activities: [{ name: "Despertando...", type: ActivityType.Playing }]
-  }
+  ]
 });
-
-// =====================
-// DEBUG GATEWAY (NUEVO)
-// =====================
-client.on("debug", msg => console.log("📡", msg));
-client.on("error", err => console.error("❌ CLIENT:", err));
-client.on("shardError", err => console.error("❌ SHARD:", err));
-client.on("shardDisconnect", () => console.warn("⚠️ Desconectado del gateway"));
-client.on("shardReconnecting", () => console.log("🔄 Reintentando conexión..."));
 
 // =====================
 // MEMORIA + COOLDOWN
@@ -70,7 +67,7 @@ const estados = [
 
 let i = 0;
 
-function rotarEstado() {
+function estado() {
   if (!client.user) return;
 
   client.user.setPresence({
@@ -87,10 +84,10 @@ function rotarEstado() {
 // =====================
 // IA
 // =====================
-async function getAI(msg, userId) {
+async function getAI(msg, id) {
   if (!LONGCAT_API) return "…";
 
-  const hist = memory.get(userId) ?? [];
+  const hist = memory.get(id) ?? [];
   hist.push({ role: "user", content: msg });
 
   try {
@@ -115,22 +112,16 @@ async function getAI(msg, userId) {
       }
     );
 
-    if (!res.ok) {
-      console.error("❌ API:", res.status);
-      return "…";
-    }
-
     const data = await res.json();
     const reply = data?.choices?.[0]?.message?.content || "…";
 
     hist.push({ role: "assistant", content: reply });
-    memory.set(userId, hist.slice(-6));
+    memory.set(id, hist.slice(-6));
 
     return reply;
 
-  } catch (err) {
-    console.error("❌ IA:", err);
-    return "…Nanachi guarda silencio.";
+  } catch {
+    return "…";
   }
 }
 
@@ -138,59 +129,34 @@ async function getAI(msg, userId) {
 // READY
 // =====================
 client.once(Events.ClientReady, () => {
-  console.log("✅ CONECTADO COMO:", client.user.tag);
+  console.log("✅ Conectado como", client.user.tag);
 
-  rotarEstado();
-  setInterval(rotarEstado, 120000);
+  estado();
+  setInterval(estado, 120000);
 });
 
 // =====================
 // MENSAJES
 // =====================
 client.on(Events.MessageCreate, async msg => {
-  try {
-    if (msg.author.bot) return;
+  if (msg.author.bot) return;
 
-    const now = Date.now();
-    const last = cooldown.get(msg.author.id) || 0;
+  const now = Date.now();
+  const last = cooldown.get(msg.author.id) || 0;
 
-    if (now - last < 4000) return;
-    cooldown.set(msg.author.id, now);
+  if (now - last < 4000) return;
+  cooldown.set(msg.author.id, now);
 
-    await msg.channel.sendTyping();
+  await msg.channel.sendTyping();
 
-    const reply = await getAI(msg.content, msg.author.id);
+  const reply = await getAI(msg.content, msg.author.id);
 
-    if (reply) {
-      await msg.reply(reply);
-    }
-
-  } catch (err) {
-    console.error("❌ MSG:", err);
+  if (reply) {
+    await msg.reply(reply);
   }
 });
 
 // =====================
-// KEEP ALIVE
+// LOGIN
 // =====================
-http.createServer((_, res) => {
-  res.end("Nanachi activa");
-}).listen(PORT, () => {
-  console.log("🌐 Web activa en", PORT);
-});
-
-// =====================
-// LOGIN (MEJORADO)
-// =====================
-async function start() {
-  try {
-    console.log("🔵 Conectando a Discord...");
-    await client.login(TOKEN);
-    console.log("🟢 Login completado");
-  } catch (err) {
-    console.error("🔴 Login falló:", err);
-    setTimeout(start, 5000); // 🔄 retry automático
-  }
-}
-
-start();
+client.login(TOKEN);
