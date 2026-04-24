@@ -1,3 +1,7 @@
+// -------------------------
+//  NANACHI — BOT FUNCIONAL
+// -------------------------
+
 import {
   Client,
   GatewayIntentBits,
@@ -15,8 +19,12 @@ const TOKEN = process.env.TOKEN;
 const LONGCAT_API = process.env.LONGCAT_API;
 const PORT = process.env.PORT || 3000;
 
+console.log("🔵 Iniciando bot...");
+console.log("TOKEN:", TOKEN ? "OK" : "MISSING");
+console.log("LONGCAT_API:", LONGCAT_API ? "OK" : "MISSING");
+
 if (!TOKEN) {
-  console.error("❌ TOKEN no encontrado en Render env");
+  console.error("❌ TOKEN no encontrado en variables de entorno");
   process.exit(1);
 }
 
@@ -33,7 +41,7 @@ const client = new Client({
 });
 
 // =====================
-// MEMORIA
+// MEMORIA + COOLDOWN
 // =====================
 const memory = new Map();
 const cooldown = new Map();
@@ -47,44 +55,35 @@ const estados = [
   "Cuidando lo que queda…"
 ];
 
-let i = 0;
+let index = 0;
 
-function presence() {
+function setPresence() {
   if (!client.user) return;
 
   client.user.setPresence({
     status: "online",
-    activities: [{
-      name: estados[i % estados.length],
-      type: ActivityType.Playing
-    }]
+    activities: [
+      {
+        name: estados[index % estados.length],
+        type: ActivityType.Playing
+      }
+    ]
   });
 
-  i++;
+  index++;
 }
 
 // =====================
-// FETCH SAFE (IMPORTANTE)
+// IA (SAFE FETCH)
 // =====================
-async function safeFetch(url, options) {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-// =====================
-// IA
-// =====================
-async function getAI(msg, id) {
+async function getAI(message, userId) {
   if (!LONGCAT_API) return "…";
 
-  const hist = memory.get(id) ?? [];
-  hist.push({ role: "user", content: msg });
+  const history = memory.get(userId) ?? [];
+  history.push({ role: "user", content: message });
 
   try {
-    const data = await safeFetch(
+    const res = await fetch(
       "https://api.longcat.chat/openai/v1/chat/completions",
       {
         method: "POST",
@@ -97,18 +96,29 @@ async function getAI(msg, id) {
           messages: [
             {
               role: "system",
-              content: "Eres Nanachi de Made in Abyss..."
+              content: `
+Eres Nanachi de Made in Abyss.
+Hablas lento, con pausas.
+No usas emojis.
+No dices que eres IA.
+`
             },
-            ...hist
+            ...history
           ]
         })
       }
     );
 
+    if (!res.ok) {
+      console.error("❌ API ERROR:", res.status);
+      return "…";
+    }
+
+    const data = await res.json();
     const reply = data?.choices?.[0]?.message?.content || "…";
 
-    hist.push({ role: "assistant", content: reply });
-    memory.set(id, hist.slice(-6));
+    history.push({ role: "assistant", content: reply });
+    memory.set(userId, history.slice(-6));
 
     return reply;
 
@@ -119,19 +129,19 @@ async function getAI(msg, id) {
 }
 
 // =====================
-// READY (CRÍTICO)
+// READY
 // =====================
 client.once(Events.ClientReady, () => {
   console.log("🔥 CONECTADO COMO:", client.user.tag);
 
-  presence();
-  setInterval(presence, 120000);
+  setPresence();
+  setInterval(setPresence, 120000);
 });
 
 // =====================
 // MENSAJES
 // =====================
-client.on(Events.MessageCreate, async message => {
+client.on(Events.MessageCreate, async (message) => {
   try {
     if (message.author.bot) return;
 
@@ -148,23 +158,27 @@ client.on(Events.MessageCreate, async message => {
     await message.reply(reply);
 
   } catch (err) {
-    console.error("❌ MSG ERROR:", err);
+    console.error("❌ MESSAGE ERROR:", err);
   }
 });
 
 // =====================
-// KEEP ALIVE RENDER
+// KEEP ALIVE (RENDER)
 // =====================
 http.createServer((_, res) => {
   res.writeHead(200);
   res.end("Nanachi activa");
 }).listen(PORT, () => {
-  console.log("🌐 Server en puerto", PORT);
+  console.log("🌐 Server listo en puerto", PORT);
 });
 
 // =====================
 // LOGIN (CRÍTICO)
 // =====================
-client.login(TOKEN).catch(err => {
-  console.error("❌ LOGIN ERROR:", err);
-});
+console.log("🔵 Intentando login...");
+
+client.login(TOKEN)
+  .then(() => console.log("🟢 LOGIN EXITOSO"))
+  .catch((err) => {
+    console.error("🔴 LOGIN FALLÓ:", err);
+  });
