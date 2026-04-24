@@ -1,8 +1,8 @@
 // ================================
-// NANACHI — IA SIMPLE Y ESTABLE
+// NANACHI — MODERN BOT (2026)
 // ================================
 
-// 🔥 FIX RED (IMPORTANTE EN RENDER)
+// 🔥 FIX RED (IMPORTANTE)
 import dns from "dns";
 dns.setDefaultResultOrder("ipv4first");
 
@@ -23,22 +23,35 @@ const LONGCAT_API = process.env.LONGCAT_API;
 const PORT = process.env.PORT || 3000;
 
 if (!TOKEN) {
-  console.error("❌ Falta TOKEN");
+  console.error("❌ TOKEN faltante");
   process.exit(1);
 }
 
 console.log("🔵 Iniciando Nanachi...");
 
 // =====================
-// CLIENT
+// CLIENT (ACTUALIZADO)
 // =====================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  presence: {
+    status: "online",
+    activities: [{ name: "Despertando...", type: ActivityType.Playing }]
+  }
 });
+
+// =====================
+// DEBUG GATEWAY (NUEVO)
+// =====================
+client.on("debug", msg => console.log("📡", msg));
+client.on("error", err => console.error("❌ CLIENT:", err));
+client.on("shardError", err => console.error("❌ SHARD:", err));
+client.on("shardDisconnect", () => console.warn("⚠️ Desconectado del gateway"));
+client.on("shardReconnecting", () => console.log("🔄 Reintentando conexión..."));
 
 // =====================
 // MEMORIA + COOLDOWN
@@ -55,30 +68,30 @@ const estados = [
   "Cuidando lo que queda…"
 ];
 
-let estadoIndex = 0;
+let i = 0;
 
-function setEstado() {
+function rotarEstado() {
   if (!client.user) return;
 
   client.user.setPresence({
     status: "online",
     activities: [{
-      name: estados[estadoIndex % estados.length],
+      name: estados[i % estados.length],
       type: ActivityType.Playing
     }]
   });
 
-  estadoIndex++;
+  i++;
 }
 
 // =====================
 // IA
 // =====================
-async function getAI(message, userId) {
+async function getAI(msg, userId) {
   if (!LONGCAT_API) return "…";
 
-  const history = memory.get(userId) ?? [];
-  history.push({ role: "user", content: message });
+  const hist = memory.get(userId) ?? [];
+  hist.push({ role: "user", content: msg });
 
   try {
     const res = await fetch(
@@ -94,14 +107,9 @@ async function getAI(message, userId) {
           messages: [
             {
               role: "system",
-              content: `
-Eres Nanachi de Made in Abyss.
-Hablas poco, con pausas "..."
-Eres calmada y observadora.
-Nunca dices que eres IA.
-`
+              content: "Eres Nanachi. Hablas poco, con pausas..."
             },
-            ...history
+            ...hist
           ]
         })
       }
@@ -115,13 +123,13 @@ Nunca dices que eres IA.
     const data = await res.json();
     const reply = data?.choices?.[0]?.message?.content || "…";
 
-    history.push({ role: "assistant", content: reply });
-    memory.set(userId, history.slice(-6));
+    hist.push({ role: "assistant", content: reply });
+    memory.set(userId, hist.slice(-6));
 
     return reply;
 
   } catch (err) {
-    console.error("❌ IA ERROR:", err);
+    console.error("❌ IA:", err);
     return "…Nanachi guarda silencio.";
   }
 }
@@ -130,16 +138,16 @@ Nunca dices que eres IA.
 // READY
 // =====================
 client.once(Events.ClientReady, () => {
-  console.log("✅ Conectado como", client.user.tag);
+  console.log("✅ CONECTADO COMO:", client.user.tag);
 
-  setEstado();
-  setInterval(setEstado, 120000);
+  rotarEstado();
+  setInterval(rotarEstado, 120000);
 });
 
 // =====================
-// MENSAJES (MODO ACTIVO)
+// MENSAJES
 // =====================
-client.on(Events.MessageCreate, async (msg) => {
+client.on(Events.MessageCreate, async msg => {
   try {
     if (msg.author.bot) return;
 
@@ -158,7 +166,7 @@ client.on(Events.MessageCreate, async (msg) => {
     }
 
   } catch (err) {
-    console.error("❌ MSG ERROR:", err);
+    console.error("❌ MSG:", err);
   }
 });
 
@@ -166,16 +174,23 @@ client.on(Events.MessageCreate, async (msg) => {
 // KEEP ALIVE
 // =====================
 http.createServer((_, res) => {
-  res.end("Nanachi viva");
+  res.end("Nanachi activa");
 }).listen(PORT, () => {
-  console.log("🌐 Web activa en puerto", PORT);
+  console.log("🌐 Web activa en", PORT);
 });
 
 // =====================
-// LOGIN
+// LOGIN (MEJORADO)
 // =====================
-console.log("🔵 Login...");
+async function start() {
+  try {
+    console.log("🔵 Conectando a Discord...");
+    await client.login(TOKEN);
+    console.log("🟢 Login completado");
+  } catch (err) {
+    console.error("🔴 Login falló:", err);
+    setTimeout(start, 5000); // 🔄 retry automático
+  }
+}
 
-client.login(TOKEN)
-  .then(() => console.log("🟢 Login OK"))
-  .catch(err => console.error("🔴 Login error:", err));
+start();
