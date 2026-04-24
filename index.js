@@ -12,7 +12,6 @@ import {
 
 import fetch from "node-fetch";
 import http from "http";
-import "dotenv/config";
 
 // =====================
 // ENV
