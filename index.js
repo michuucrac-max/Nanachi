@@ -1,11 +1,12 @@
-// -------------------------
-//  NANACHI — BOT FUNCIONAL
-// -------------------------
+// ================================
+// NANACHI BOT — DEBUG TOTAL
+// ================================
+
+console.log("🚨 INICIANDO PROCESO...");
 
 import {
   Client,
   GatewayIntentBits,
-  Partials,
   Events,
   ActivityType
 } from "discord.js";
@@ -13,18 +14,18 @@ import {
 import http from "http";
 
 // =====================
-// ENV (RENDER)
+// VARIABLES (RENDER)
 // =====================
 const TOKEN = process.env.TOKEN;
-const LONGCAT_API = process.env.LONGCAT_API;
 const PORT = process.env.PORT || 3000;
 
-console.log("🔵 Iniciando bot...");
-console.log("TOKEN:", TOKEN ? "OK" : "MISSING");
-console.log("LONGCAT_API:", LONGCAT_API ? "OK" : "MISSING");
+console.log("🔎 TOKEN:", TOKEN ? "OK" : "NO");
 
+// =====================
+// VALIDACIÓN TOKEN
+// =====================
 if (!TOKEN) {
-  console.error("❌ TOKEN no encontrado en variables de entorno");
+  console.error("❌ TOKEN NO DEFINIDO EN RENDER");
   process.exit(1);
 }
 
@@ -36,149 +37,59 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ],
-  partials: [Partials.Channel]
+  ]
 });
-
-// =====================
-// MEMORIA + COOLDOWN
-// =====================
-const memory = new Map();
-const cooldown = new Map();
-
-// =====================
-// ESTADOS
-// =====================
-const estados = [
-  "Observando el Abismo…",
-  "Escuchando el silencio…",
-  "Cuidando lo que queda…"
-];
-
-let index = 0;
-
-function setPresence() {
-  if (!client.user) return;
-
-  client.user.setPresence({
-    status: "online",
-    activities: [
-      {
-        name: estados[index % estados.length],
-        type: ActivityType.Playing
-      }
-    ]
-  });
-
-  index++;
-}
-
-// =====================
-// IA (SAFE FETCH)
-// =====================
-async function getAI(message, userId) {
-  if (!LONGCAT_API) return "…";
-
-  const history = memory.get(userId) ?? [];
-  history.push({ role: "user", content: message });
-
-  try {
-    const res = await fetch(
-      "https://api.longcat.chat/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LONGCAT_API}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "LongCat-Flash-Chat",
-          messages: [
-            {
-              role: "system",
-              content: `
-Eres Nanachi de Made in Abyss.
-Hablas lento, con pausas.
-No usas emojis.
-No dices que eres IA.
-`
-            },
-            ...history
-          ]
-        })
-      }
-    );
-
-    if (!res.ok) {
-      console.error("❌ API ERROR:", res.status);
-      return "…";
-    }
-
-    const data = await res.json();
-    const reply = data?.choices?.[0]?.message?.content || "…";
-
-    history.push({ role: "assistant", content: reply });
-    memory.set(userId, history.slice(-6));
-
-    return reply;
-
-  } catch (err) {
-    console.error("❌ IA ERROR:", err);
-    return "…";
-  }
-}
 
 // =====================
 // READY
 // =====================
 client.once(Events.ClientReady, () => {
-  console.log("🔥 CONECTADO COMO:", client.user.tag);
+  console.log("✅ BOT CONECTADO COMO:", client.user.tag);
 
-  setPresence();
-  setInterval(setPresence, 120000);
+  client.user.setPresence({
+    status: "online",
+    activities: [
+      {
+        name: "Observando el Abismo…",
+        type: ActivityType.Playing
+      }
+    ]
+  });
 });
 
 // =====================
-// MENSAJES
+// MENSAJES (RESPUESTA SIMPLE)
 // =====================
-client.on(Events.MessageCreate, async (message) => {
+client.on(Events.MessageCreate, async (msg) => {
   try {
-    if (message.author.bot) return;
+    if (msg.author.bot) return;
 
-    const now = Date.now();
-    const last = cooldown.get(message.author.id) || 0;
+    console.log("📩 MENSAJE:", msg.content);
 
-    if (now - last < 4000) return;
-    cooldown.set(message.author.id, now);
-
-    await message.channel.sendTyping();
-
-    const reply = await getAI(message.content, message.author.id);
-
-    await message.reply(reply);
+    if (msg.mentions.has(client.user)) {
+      await msg.reply("…Estoy aquí.");
+    }
 
   } catch (err) {
-    console.error("❌ MESSAGE ERROR:", err);
+    console.error("❌ ERROR EN MENSAJE:", err);
   }
 });
 
 // =====================
 // KEEP ALIVE (RENDER)
 // =====================
-http.createServer((_, res) => {
+http.createServer((req, res) => {
   res.writeHead(200);
-  res.end("Nanachi activa");
+  res.end("Bot activo");
 }).listen(PORT, () => {
-  console.log("🌐 Server listo en puerto", PORT);
+  console.log("🌐 WEB SERVER OK EN PUERTO", PORT);
 });
 
 // =====================
-// LOGIN (CRÍTICO)
+// LOGIN
 // =====================
-console.log("🔵 Intentando login...");
+console.log("🔵 INTENTANDO LOGIN...");
 
 client.login(TOKEN)
   .then(() => console.log("🟢 LOGIN EXITOSO"))
-  .catch((err) => {
-    console.error("🔴 LOGIN FALLÓ:", err);
-  });
+  .catch(err => console.error("🔴 LOGIN ERROR:", err));
