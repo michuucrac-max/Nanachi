@@ -122,7 +122,6 @@ function cleanReply(text) {
 // =====================
 
 async function longcatAI(message, userId) {
-async function longcatAI(message, userId) {
   const GROQ_API = process.env.GROQ_API;
 
   if (!GROQ_API) {
@@ -158,14 +157,30 @@ async function longcatAI(message, userId) {
       }
     );
 
-    console.log("STATUS:", res.status);
+    // 🔍 Ver estado HTTP
+    if (!res.ok) {
+      const errText = await res.text();
+      console.log("❌ ERROR HTTP:", res.status, errText);
+      throw new Error(`HTTP ${res.status}`);
+    }
 
-    const data = await res.json();
-    console.log("RESPONSE:", data);
+    // 🔍 Leer como texto primero (evita crash)
+    const text = await res.text();
+    console.log("📦 RAW RESPONSE:", text);
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("Respuesta no es JSON válido");
+    }
 
     let reply = data?.choices?.[0]?.message?.content;
 
-    if (!reply) throw new Error("Respuesta vacía");
+    if (!reply) {
+      throw new Error("Respuesta vacía");
+    }
 
     reply = cleanReply(limitReply(reply));
 
@@ -181,18 +196,22 @@ async function longcatAI(message, userId) {
   } catch (err) {
     console.log("❌ ERROR GROQ:", err);
 
+    // 📩 Enviar error por DM
     try {
       const user = await client.users.fetch("1427297946151551148");
 
       await user.send(
-        "⚠️ ERROR GROQ\n\n```" + err.message + "```"
+        "⚠️ ERROR EN NANACHI (GROQ)\n\n" +
+        "```" + err.message + "```"
       );
-    } catch {}
+    } catch (e) {
+      console.log("No se pudo enviar DM:", e);
+    }
 
     return "Nanachi se queda en silencio...";
   }
 }
-  
+
 // =====================
 // READY
 // =====================
