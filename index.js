@@ -13,9 +13,6 @@ import {
 import fs from "fs";
 import http from "http";
 
-// ⚠️ NO uses node-fetch en Node 18+
-/* import fetch from "node-fetch"; */
-
 // =====================
 // ENV
 // =====================
@@ -36,9 +33,19 @@ let NANACHI_PROMPT = "Eres Nanachi.";
 
 try {
   NANACHI_PROMPT = fs.readFileSync("nanachi.txt", "utf8");
+
+  if (!NANACHI_PROMPT.trim()) {
+    throw new Error("Vacío");
+  }
+
   console.log("✅ Historia cargada");
-} catch {
-  console.log("⚠️ No se encontró nanachi.txt");
+} catch (err) {
+  console.log("⚠️ Error cargando historia:", err.message);
+
+  NANACHI_PROMPT = `
+Eres Nanachi, sarcástica, tranquila y directa.
+Respondes de forma natural y con personalidad.
+`;
 }
 
 // =====================
@@ -96,37 +103,103 @@ function cleanReply(text) {
 }
 
 // =====================
-// LONGCAT AI (ARREGLADO)
+// LONGCAT AI (FINAL)
 // =====================
 
-const LONGCAT_API = process.env.LONGCAT_API;
+async function longcatAI(message, userId) {
+  const API = process.env.LONGCAT_API;
 
-const res = await fetch(
-  "https://api.longcat.chat/openai/v1/chat/completions",
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LONGCAT_API}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "LongCat-2.0-Preview",
-      messages: [
-        {
-          role: "system",
-          content: NANACHI_PROMPT
-        },
-        ...history
-      ],
-      max_tokens: 1000,
-      temperature: 0.8
-    })
+  if (!API) {
+    console.log("⚠️ FALTA LONGCAT_API");
+    return "Nanachi no tiene energía...";
   }
-);
 
-// =====================
-// READY
-// =====================
+  const history = memory.get(userId) ?? [];
+
+  history.push({
+    role: "user",
+    content: message
+  });
+
+  let timeout;
+
+  try {
+    console.log("📡 Enviando a LongCat...");
+
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(
+      "https://api.longcat.chat/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "LongCat-2.0-Preview",
+          messages: [
+            { role: "system", content: NANACHI_PROMPT },
+            ...history
+          ],
+          max_tokens: 1000,
+          temperature: 0.8
+        }),
+        signal: controller.signal
+      }
+    );
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.log("❌ ERROR HTTP:", res.status, errText);
+      return "Nanachi no pudo responder...";
+    }
+
+    const text = await res.text();
+    console.log("📦 RAW:", text);
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return "Nanachi no entendió la respuesta...";
+    }
+
+    let reply = data?.choices?.[0]?.message?.content;
+
+    if (!reply) {
+      return "Nanachi se queda pensando...";
+    }
+
+    reply = cleanReply(limitReply(reply));
+
+    history.push({
+      role: "assistant",
+      content: reply
+    });
+
+    memory.set(userId, history.slice(-8));
+
+    return reply;
+
+  } catch (err) {
+    console.log("❌ ERROR:", err);
+
+    if (err.name === "AbortError") {
+      return "Nanachi se distrajo...";
+    }
+
+    return "Nanachi guarda silencio...";
+  } finally {
+    clearTimeout(timeout);
+  }
+ }
+
+// -------------------------
+//  NANACHI — INDEX.JS (PARTE 2)
+// -------------------------
 
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Conectada como ${client.user.tag}`);
@@ -188,7 +261,7 @@ http.createServer((_, res) => {
 }).listen(process.env.PORT || 3000);
 
 // =====================
-// ANTI-CRASH GLOBAL
+// ANTI-CRASH
 // =====================
 
 process.on("uncaughtException", err => {
@@ -204,3 +277,4 @@ process.on("unhandledRejection", err => {
 // =====================
 
 client.login(TOKEN);
+
