@@ -11,17 +11,16 @@ import {
 } from "discord.js";
 
 import fs from "fs";
-import fetch from "node-fetch";
 import http from "http";
+
+// ⚠️ NO uses node-fetch en Node 18+
+/* import fetch from "node-fetch"; */
 
 // =====================
 // ENV
 // =====================
 
 const TOKEN = process.env.TOKEN;
-const LONGCAT_API = process.env.LONGCAT_API;
-
-// 👉 ID al que quieres enviar errores
 const OWNER_ID = "1427297946151551148";
 
 if (!TOKEN) {
@@ -36,11 +35,7 @@ if (!TOKEN) {
 let NANACHI_PROMPT = "Eres Nanachi.";
 
 try {
-  NANACHI_PROMPT = fs.readFileSync(
-    "nanachi.txt",
-    "utf8"
-  );
-
+  NANACHI_PROMPT = fs.readFileSync("nanachi.txt", "utf8");
   console.log("✅ Historia cargada");
 } catch {
   console.log("⚠️ No se encontró nanachi.txt");
@@ -64,20 +59,6 @@ const memory = new Map();
 const lastReply = new Map();
 
 // =====================
-// JSON
-// =====================
-
-const loadJSON = (file, def) => {
-  try {
-    return fs.existsSync(file)
-      ? JSON.parse(fs.readFileSync(file, "utf8"))
-      : def;
-  } catch {
-    return def;
-  }
-};
-
-// =====================
 // TEXTO
 // =====================
 
@@ -96,9 +77,7 @@ function splitText(text, max = 1800) {
     }
   }
 
-  if (current.trim()) {
-    parts.push(current);
-  }
+  if (current.trim()) parts.push(current);
 
   return parts;
 }
@@ -110,7 +89,6 @@ function limitReply(text, max = 1800) {
 
 function cleanReply(text) {
   if (!text) return "";
-
   return text
     .replace(/^\s*\.+\s*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
@@ -118,14 +96,15 @@ function cleanReply(text) {
 }
 
 // =====================
-// OPENROUTER AI
+// OPENROUTER AI (ARREGLADO)
 // =====================
 
 async function longcatAI(message, userId) {
   const API = process.env.OPENROUTER_API;
 
   if (!API) {
-    throw new Error("FALTA OPENROUTER_API");
+    console.log("⚠️ FALTA OPENROUTER_API");
+    return "Nanachi no tiene energía...";
   }
 
   const history = memory.get(userId) ?? [];
@@ -135,9 +114,13 @@ async function longcatAI(message, userId) {
     content: message
   });
 
+  let timeout;
+
   try {
+    console.log("📡 Enviando a OpenRouter...");
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    timeout = setTimeout(() => controller.abort(), 15000);
 
     const res = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -150,10 +133,7 @@ async function longcatAI(message, userId) {
         body: JSON.stringify({
           model: "mistralai/mistral-7b-instruct",
           messages: [
-            {
-              role: "system",
-              content: NANACHI_PROMPT
-            },
+            { role: "system", content: NANACHI_PROMPT },
             ...history
           ]
         }),
@@ -161,19 +141,28 @@ async function longcatAI(message, userId) {
       }
     );
 
-    clearTimeout(timeout);
-
     if (!res.ok) {
       const errText = await res.text();
-      console.log("ERROR:", res.status, errText);
-      throw new Error(`HTTP ${res.status}`);
+      console.log("❌ ERROR HTTP:", res.status, errText);
+      return "Nanachi no pudo responder...";
     }
 
-    const data = await res.json();
+    const text = await res.text();
+    console.log("📦 RAW:", text);
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return "Nanachi no entendió la respuesta...";
+    }
 
     let reply = data?.choices?.[0]?.message?.content;
 
-    if (!reply) throw new Error("Respuesta vacía");
+    if (!reply) {
+      return "Nanachi se queda pensando...";
+    }
 
     reply = cleanReply(limitReply(reply));
 
@@ -187,13 +176,15 @@ async function longcatAI(message, userId) {
     return reply;
 
   } catch (err) {
-    console.log("ERROR:", err);
+    console.log("❌ ERROR:", err);
 
     if (err.name === "AbortError") {
       return "Nanachi se distrajo...";
     }
 
     return "Nanachi guarda silencio...";
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -214,35 +205,40 @@ client.once(Events.ClientReady, async () => {
 // =====================
 
 client.on(Events.MessageCreate, async message => {
-  if (message.author.bot) return;
+  try {
+    if (message.author.bot) return;
 
-  const isDM = !message.guild;
-  const call = /\b(nana|nanachi)\b/i;
+    const isDM = !message.guild;
+    const call = /\b(nana|nanachi)\b/i;
 
-  if (!isDM && !call.test(message.content)) return;
+    if (!isDM && !call.test(message.content)) return;
 
-  const now = Date.now();
-  const last = lastReply.get(message.author.id) ?? 0;
+    const now = Date.now();
+    const last = lastReply.get(message.author.id) ?? 0;
 
-  if (now - last < 4000) return;
+    if (now - last < 4000) return;
 
-  lastReply.set(message.author.id, now);
+    lastReply.set(message.author.id, now);
 
-  await message.channel.sendTyping();
+    await message.channel.sendTyping();
 
-  const reply = await longcatAI(
-    message.content,
-    message.author.id
-  );
+    const reply = await longcatAI(
+      message.content,
+      message.author.id
+    );
 
-  if (!reply) return;
+    if (!reply) return;
 
-  const chunks = splitText(reply);
+    const chunks = splitText(reply);
 
-  await message.reply(chunks.shift());
+    await message.reply(chunks.shift());
 
-  for (const chunk of chunks) {
-    await message.channel.send(chunk);
+    for (const chunk of chunks) {
+      await message.channel.send(chunk);
+    }
+
+  } catch (err) {
+    console.log("💥 ERROR MENSAJE:", err);
   }
 });
 
@@ -254,6 +250,18 @@ http.createServer((_, res) => {
   res.writeHead(200);
   res.end("Nanachi vive...");
 }).listen(process.env.PORT || 3000);
+
+// =====================
+// ANTI-CRASH GLOBAL
+// =====================
+
+process.on("uncaughtException", err => {
+  console.log("💥 ERROR GLOBAL:", err);
+});
+
+process.on("unhandledRejection", err => {
+  console.log("💥 PROMISE ERROR:", err);
+});
 
 // =====================
 // LOGIN
