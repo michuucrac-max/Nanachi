@@ -136,6 +136,11 @@ async function longcatAI(message, userId) {
   });
 
   try {
+    console.log("📡 Enviando a Groq...");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s
+
     const res = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
@@ -153,18 +158,23 @@ async function longcatAI(message, userId) {
             },
             ...history
           ]
-        })
+        }),
+        signal: controller.signal
       }
     );
 
-    // 🔍 Ver estado HTTP
+    clearTimeout(timeout);
+
+    console.log("✅ Respuesta recibida:", res.status);
+
+    // 🔴 ERROR HTTP
     if (!res.ok) {
       const errText = await res.text();
       console.log("❌ ERROR HTTP:", res.status, errText);
       throw new Error(`HTTP ${res.status}`);
     }
 
-    // 🔍 Leer como texto primero (evita crash)
+    // 🧠 Leer como texto primero
     const text = await res.text();
     console.log("📦 RAW RESPONSE:", text);
 
@@ -196,13 +206,17 @@ async function longcatAI(message, userId) {
   } catch (err) {
     console.log("❌ ERROR GROQ:", err);
 
-    // 📩 Enviar error por DM
+    // ⏳ Timeout detectado
+    if (err.name === "AbortError") {
+      return "Nanachi se distrajo... (timeout)";
+    }
+
+    // 📩 DM con error
     try {
       const user = await client.users.fetch("1427297946151551148");
 
       await user.send(
-        "⚠️ ERROR EN NANACHI (GROQ)\n\n" +
-        "```" + err.message + "```"
+        "⚠️ ERROR EN NANACHI\n\n```" + err.message + "```"
       );
     } catch (e) {
       console.log("No se pudo enviar DM:", e);
