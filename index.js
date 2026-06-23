@@ -118,12 +118,14 @@ function cleanReply(text) {
 }
 
 // =====================
-// LONGCAT AI (ARREGLADO)
+// GROQ AI (ARREGLADO)
 // =====================
 
 async function longcatAI(message, userId) {
-  if (!LONGCAT_API) {
-    return "⚠️ Falta LONGCAT_API";
+  const GROQ_API = process.env.GROQ_API;
+
+  if (!GROQ_API) {
+    return "⚠️ Falta GROQ_API";
   }
 
   const history = memory.get(userId) ?? [];
@@ -135,15 +137,15 @@ async function longcatAI(message, userId) {
 
   try {
     const res = await fetch(
-      "https://api.longcat.chat/openai/v1/chat/completions",
+      "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LONGCAT_API}`,
+          Authorization: `Bearer ${GROQ_API}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "LongCat-2.0-Preview", // 🔥 CAMBIADO (más seguro)
+          model: "llama-3.3-70b-versatile",
           messages: [
             {
               role: "system",
@@ -157,10 +159,8 @@ async function longcatAI(message, userId) {
 
     console.log("STATUS:", res.status);
 
-    const text = await res.text();
-    console.log("RAW RESPONSE:", text);
-
-    const data = JSON.parse(text);
+    const data = await res.json();
+    console.log("RESPONSE:", data);
 
     let reply = data?.choices?.[0]?.message?.content;
 
@@ -177,26 +177,21 @@ async function longcatAI(message, userId) {
 
     return reply;
 
-    } catch (err) {
-    console.log("❌ ERROR LONGCAT:", err);
+  } catch (err) {
+    console.log("❌ ERROR GROQ:", err);
 
-    // 👉 ENVÍA DM CON ERROR
     try {
-      const user = await client.users.fetch(OWNER_ID);
+      const user = await client.users.fetch("1427297946151551148");
 
       await user.send(
-        "⚠️ ERROR EN NANACHI\n\n" +
-        "Mensaje:\n```" + err.message + "```"
+        "⚠️ ERROR GROQ\n\n" +
+        "```" + err.message + "```"
       );
+    } catch {}
 
-      console.log("📩 Error enviado por DM");
-    } catch (e) {
-      console.log("❌ No se pudo enviar DM:", e);
-    }
-
-    return "…Nanachi guarda silencio.Error de longcat";
+    return "Nanachi se queda en silencio...";
   }
-}
+      }
 
 // =====================
 // READY
