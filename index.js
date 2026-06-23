@@ -1,5 +1,5 @@
 // -------------------------
-//  NANACHI — INDEX.JS
+//  NANACHI — INDEX.JS (PARTE 1)
 // -------------------------
 
 import {
@@ -21,6 +21,9 @@ import http from "http";
 const TOKEN = process.env.TOKEN;
 const LONGCAT_API = process.env.LONGCAT_API;
 
+// 👉 ID al que quieres enviar errores
+const OWNER_ID = "1427297946151551148";
+
 if (!TOKEN) {
   console.error("❌ Falta TOKEN");
   process.exit(1);
@@ -40,9 +43,7 @@ try {
 
   console.log("✅ Historia cargada");
 } catch {
-  console.log(
-    "⚠️ No se encontró nanachi.txt"
-  );
+  console.log("⚠️ No se encontró nanachi.txt");
 }
 
 // =====================
@@ -69,9 +70,7 @@ const lastReply = new Map();
 const loadJSON = (file, def) => {
   try {
     return fs.existsSync(file)
-      ? JSON.parse(
-          fs.readFileSync(file, "utf8")
-        )
+      ? JSON.parse(fs.readFileSync(file, "utf8"))
       : def;
   } catch {
     return def;
@@ -79,58 +78,17 @@ const loadJSON = (file, def) => {
 };
 
 // =====================
-// ESTADOS
-// =====================
-
-const estadosRaw = loadJSON(
-  "estados.json",
-  []
-);
-
-const estados = Array.isArray(estadosRaw)
-  ? estadosRaw.filter(
-      estado =>
-        typeof estado === "string"
-    )
-  : [];
-
-let estadoIndex = 0;
-
-function rotarEstados() {
-  if (!client.user) return;
-
-  if (!estados.length) return;
-
-  client.user.setActivity(
-    estados[
-      estadoIndex % estados.length
-    ],
-    {
-      type: ActivityType.Playing
-    }
-  );
-
-  estadoIndex++;
-}
-
-// =====================
 // TEXTO
 // =====================
 
-function splitText(
-  text,
-  max = 1800
-) {
-  if (typeof text !== "string")
-    return [];
+function splitText(text, max = 1800) {
+  if (typeof text !== "string") return [];
 
   const parts = [];
   let current = "";
 
   for (const line of text.split("\n")) {
-    if (
-      (current + line).length > max
-    ) {
+    if ((current + line).length > max) {
       parts.push(current);
       current = line + "\n";
     } else {
@@ -145,47 +103,30 @@ function splitText(
   return parts;
 }
 
-function limitReply(
-  text,
-  max = 1800
-) {
-  if (typeof text !== "string")
-    return "";
-
-  return text.length <= max
-    ? text
-    : text.slice(0, max);
+function limitReply(text, max = 1800) {
+  if (typeof text !== "string") return "";
+  return text.length <= max ? text : text.slice(0, max);
 }
 
 function cleanReply(text) {
   if (!text) return "";
 
   return text
-    .replace(
-      /^\s*\.+\s*$/gm,
-      ""
-    )
-    .replace(
-      /\n{3,}/g,
-      "\n\n"
-    )
+    .replace(/^\s*\.+\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
 // =====================
-// LONGCAT AI
+// LONGCAT AI (ARREGLADO)
 // =====================
 
-async function longcatAI(
-  message,
-  userId
-) {
+async function longcatAI(message, userId) {
   if (!LONGCAT_API) {
-    return "…Nanachi te escucha.";
+    return "⚠️ Falta LONGCAT_API";
   }
 
-  const history =
-    memory.get(userId) ?? [];
+  const history = memory.get(userId) ?? [];
 
   history.push({
     role: "user",
@@ -199,17 +140,14 @@ async function longcatAI(
         method: "POST",
         headers: {
           Authorization: `Bearer ${LONGCAT_API}`,
-          "Content-Type":
-            "application/json"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model:
-            "LongCat-Flash-Chat",
+          model: "gpt-3.5-turbo", // 🔥 CAMBIADO (más seguro)
           messages: [
             {
               role: "system",
-              content:
-                NANACHI_PROMPT
+              content: NANACHI_PROMPT
             },
             ...history
           ]
@@ -217,33 +155,44 @@ async function longcatAI(
       }
     );
 
-    const data =
-      await res.json();
+    console.log("STATUS:", res.status);
 
-    let reply =
-      data?.choices?.[0]
-        ?.message?.content;
+    const text = await res.text();
+    console.log("RAW RESPONSE:", text);
 
-    if (!reply)
-      throw new Error();
+    const data = JSON.parse(text);
 
-    reply = cleanReply(
-      limitReply(reply)
-    );
+    let reply = data?.choices?.[0]?.message?.content;
+
+    if (!reply) throw new Error("Respuesta vacía");
+
+    reply = cleanReply(limitReply(reply));
 
     history.push({
       role: "assistant",
       content: reply
     });
 
-    memory.set(
-      userId,
-      history.slice(-8)
-    );
+    memory.set(userId, history.slice(-8));
 
     return reply;
-  } catch (err) {
-    console.log(err);
+
+    } catch (err) {
+    console.log("❌ ERROR LONGCAT:", err);
+
+    // 👉 ENVÍA DM CON ERROR
+    try {
+      const user = await client.users.fetch(OWNER_ID);
+
+      await user.send(
+        "⚠️ ERROR EN NANACHI\n\n" +
+        "Mensaje:\n```" + err.message + "```"
+      );
+
+      console.log("📩 Error enviado por DM");
+    } catch (e) {
+      console.log("❌ No se pudo enviar DM:", e);
+    }
 
     return "…Nanachi guarda silencio.";
   }
@@ -253,120 +202,62 @@ async function longcatAI(
 // READY
 // =====================
 
-client.once(
-  Events.ClientReady,
-  async () => {
-    console.log(
-      `✅ Conectada como ${client.user.tag}`
-    );
+client.once(Events.ClientReady, async () => {
+  console.log(`✅ Conectada como ${client.user.tag}`);
 
-    client.user.setActivity(
-      "Observando el Abismo…",
-      {
-        type:
-          ActivityType.Playing
-      }
-    );
-
-    if (estados.length) {
-      setInterval(
-        rotarEstados,
-        120000
-      );
-    }
-  }
-);
+  client.user.setActivity("Observando el Abismo…", {
+    type: ActivityType.Playing
+  });
+});
 
 // =====================
-// RESPONDER MENSAJE
+// MENSAJES
 // =====================
 
-client.on(
-  Events.MessageCreate,
-  async message => {
-    if (message.author.bot)
-      return;
+client.on(Events.MessageCreate, async message => {
+  if (message.author.bot) return;
 
-    const isDM =
-      !message.guild;
+  const isDM = !message.guild;
+  const call = /\b(nana|nanachi)\b/i;
 
-    const call =
-      /\b(nana|nanachi)\b/i;
+  if (!isDM && !call.test(message.content)) return;
 
-    if (
-      !isDM &&
-      !call.test(
-        message.content
-      )
-    )
-      return;
+  const now = Date.now();
+  const last = lastReply.get(message.author.id) ?? 0;
 
-    const now = Date.now();
+  if (now - last < 4000) return;
 
-    const last =
-      lastReply.get(
-        message.author.id
-      ) ?? 0;
+  lastReply.set(message.author.id, now);
 
-    if (now - last < 4000)
-      return;
+  await message.channel.sendTyping();
 
-    lastReply.set(
-      message.author.id,
-      now
-    );
+  const reply = await longcatAI(
+    message.content,
+    message.author.id
+  );
 
-    await message.channel.sendTyping();
+  if (!reply) return;
 
-    const reply =
-      await longcatAI(
-        message.content,
-        message.author.id
-      );
+  const chunks = splitText(reply);
 
-    if (!reply) return;
+  await message.reply(chunks.shift());
 
-    const chunks =
-      splitText(reply);
-
-    await message.reply(
-      chunks.shift()
-    );
-
-    for (const chunk of chunks) {
-      await message.channel.send(
-        chunk
-      );
-    }
+  for (const chunk of chunks) {
+    await message.channel.send(chunk);
   }
-);
+});
 
 // =====================
 // WEB SERVICE
 // =====================
 
-http
-  .createServer(
-    (_, res) => {
-      res.writeHead(200);
-
-      res.end(
-        "Nanachi observa el Abismo..."
-      );
-    }
-  )
-  .listen(
-    process.env.PORT ||
-      3000
-  );
+http.createServer((_, res) => {
+  res.writeHead(200);
+  res.end("Nanachi vive...");
+}).listen(process.env.PORT || 3000);
 
 // =====================
-// login
+// LOGIN
 // =====================
 
 client.login(TOKEN);
-
-// =====================
-// TEXTO
-// =====================
-
