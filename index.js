@@ -44,7 +44,7 @@ try {
 
   NANACHI_PROMPT = `
 Eres Nanachi, sarcástica, tranquila y directa.
-Respondes de forma natural y con personalidad.
+Respondes de forma natural, corta y con personalidad.
 `;
 }
 
@@ -110,10 +110,20 @@ async function longcatAI(message, userId) {
   const API = process.env.GEMINI_API;
 
   if (!API) {
+    console.log("⚠️ FALTA GEMINI_API");
     return "Nanachi no tiene energía...";
   }
 
+  const history = memory.get(userId) ?? [];
+
+  history.push({
+    role: "user",
+    content: message
+  });
+
   try {
+    console.log("📡 Enviando a Gemini...");
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API}`,
       {
@@ -138,13 +148,26 @@ async function longcatAI(message, userId) {
 
     const data = await res.json();
 
-    return (
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Nanachi guarda silencio..."
-    );
+    let reply =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!reply) {
+      return "Nanachi se queda pensando...";
+    }
+
+    reply = cleanReply(limitReply(reply));
+
+    history.push({
+      role: "assistant",
+      content: reply
+    });
+
+    memory.set(userId, history.slice(-8));
+
+    return reply;
 
   } catch (err) {
-    console.log(err);
+    console.log("❌ ERROR:", err);
     return "Nanachi guarda silencio...";
   }
 }
@@ -229,4 +252,3 @@ process.on("unhandledRejection", err => {
 // =====================
 
 client.login(TOKEN);
-
