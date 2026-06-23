@@ -96,97 +96,33 @@ function cleanReply(text) {
 }
 
 // =====================
-// OPENROUTER AI (ARREGLADO)
+// LONGCAT AI (ARREGLADO)
 // =====================
 
-async function longcatAI(message, userId) {
-  const API = process.env.OPENROUTER_API;
+const LONGCAT_API = process.env.LONGCAT_API;
 
-  if (!API) {
-    console.log("⚠️ FALTA OPENROUTER_API");
-    return "Nanachi no tiene energía...";
-  }
-
-  const history = memory.get(userId) ?? [];
-
-  history.push({
-    role: "user",
-    content: message
-  });
-
-  let timeout;
-
-  try {
-    console.log("📡 Enviando a OpenRouter...");
-
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 15000);
-
-    const res = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${API}`,
-          "Content-Type": "application/json"
+const res = await fetch(
+  "https://api.longcat.chat/openai/v1/chat/completions",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LONGCAT_API}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "LongCat-2.0-Preview",
+      messages: [
+        {
+          role: "system",
+          content: NANACHI_PROMPT
         },
-        body: JSON.stringify({
-          model: "mistralai/mistral-7b-instruct",
-          messages: [
-            { role: "system", content: NANACHI_PROMPT },
-            ...history
-          ]
-        }),
-        signal: controller.signal
-      }
-    );
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.log("❌ ERROR HTTP:", res.status, errText);
-      return "Nanachi no pudo responder...";
-    }
-
-    const text = await res.text();
-    console.log("📦 RAW:", text);
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return "Nanachi no entendió la respuesta...";
-    }
-
-    let reply = data?.choices?.[0]?.message?.content;
-
-    if (!reply) {
-      return "Nanachi se queda pensando...";
-    }
-
-    reply = cleanReply(limitReply(reply));
-
-    history.push({
-      role: "assistant",
-      content: reply
-    });
-
-    memory.set(userId, history.slice(-8));
-
-    return reply;
-
-  } catch (err) {
-    console.log("❌ ERROR:", err);
-
-    if (err.name === "AbortError") {
-      return "Nanachi se distrajo...";
-    }
-
-    return "Nanachi guarda silencio...";
-  } finally {
-    clearTimeout(timeout);
+        ...history
+      ],
+      max_tokens: 1000,
+      temperature: 0.8
+    })
   }
-}
+);
 
 // =====================
 // READY
