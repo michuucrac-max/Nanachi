@@ -1,5 +1,5 @@
 // =====================
-// NANACHI BOT — PRO VERSION
+// NANACHI BOT — DEBUG TOTAL
 // =====================
 
 import {
@@ -20,29 +20,27 @@ import http from "http";
 
 const TOKEN = process.env.TOKEN;
 const GEMINI_API = process.env.GEMINI_API;
-const OWNER_ID = "1427297946151551148";
+
+console.log("🔍 DEBUG ENV:");
+console.log("TOKEN:", TOKEN ? "OK" : "❌ FALTA");
+console.log("GEMINI_API:", GEMINI_API ? "OK" : "❌ FALTA");
 
 if (!TOKEN) {
-  console.error("❌ Falta TOKEN de Discord");
+  console.error("❌ TOKEN no definido");
   process.exit(1);
-}
-
-if (!GEMINI_API) {
-  console.error("❌ Falta GEMINI_API (Nanachi no tendrá energía)");
 }
 
 // =====================
 // PROMPT
 // =====================
 
-let NANACHI_PROMPT = "Eres Nanachi.";
+let NANACHI_PROMPT = "Eres Nanachi, sarcástica, directa y tranquila.";
 
 try {
   const file = fs.readFileSync("nanachi.txt", "utf8");
-
   if (file.trim()) {
     NANACHI_PROMPT = file;
-    console.log("✅ Historia cargada");
+    console.log("✅ Prompt cargado");
   }
 } catch {
   console.log("⚠️ Usando prompt por defecto");
@@ -63,7 +61,7 @@ const client = new Client({
 });
 
 // =====================
-// MEMORY SYSTEM
+// MEMORY + COOLDOWN
 // =====================
 
 const memory = new Map();
@@ -89,12 +87,16 @@ function chunk(text, size = 1800) {
 }
 
 // =====================
-// GEMINI REQUEST
+// GEMINI (DEBUG REAL)
 // =====================
 
 async function askGemini(userId, message) {
-  if (!GEMINI_API) {
-    return "Nanachi no tiene energía...";
+  const API = process.env.GEMINI_API;
+
+  console.log("🔑 GEMINI_API:", API ? "OK" : "UNDEFINED");
+
+  if (!API) {
+    return "❌ ERROR: GEMINI_API no está definida en Render.";
   }
 
   const history = memory.get(userId) || [];
@@ -114,7 +116,7 @@ Nanachi:
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API}`,
       {
         method: "POST",
         headers: {
@@ -130,21 +132,22 @@ Nanachi:
       }
     );
 
-    const text = await res.text();
+    const raw = await res.text();
+
+    console.log("📡 STATUS:", res.status);
+    console.log("📡 RESPUESTA CRUDA:", raw);
 
     if (!res.ok) {
-      console.log("❌ GEMINI ERROR:", text);
-      return "Nanachi mira al vacío… algo salió mal.";
+      return `❌ ERROR GEMINI (${res.status}):\n${raw}`;
     }
 
-    const data = JSON.parse(text);
+    const data = JSON.parse(raw);
 
     let reply =
       data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!reply) {
-      console.log("⚠️ Respuesta vacía:", text);
-      return "Nanachi se queda pensando...";
+      return `⚠️ Gemini respondió vacío:\n${raw}`;
     }
 
     reply = clean(reply);
@@ -158,8 +161,8 @@ Nanachi:
     return reply;
 
   } catch (err) {
-    console.log("💥 ERROR GEMINI:", err);
-    return "Nanachi guarda silencio...";
+    console.log("💥 ERROR FETCH:", err);
+    return `💥 ERROR FETCH:\n${err.message}`;
   }
 }
 
@@ -170,13 +173,13 @@ Nanachi:
 client.once(Events.ClientReady, () => {
   console.log(`✅ Conectada como ${client.user.tag}`);
 
-  client.user.setActivity("El Abismo...", {
+  client.user.setActivity("Observando el Abismo...", {
     type: ActivityType.Playing
   });
 });
 
 // =====================
-// MESSAGE HANDLER
+// MENSAJES
 // =====================
 
 client.on(Events.MessageCreate, async message => {
@@ -188,7 +191,6 @@ client.on(Events.MessageCreate, async message => {
 
     if (!isDM && !trigger.test(message.content)) return;
 
-    // Cooldown
     const now = Date.now();
     const last = cooldown.get(message.author.id) || 0;
 
@@ -228,7 +230,7 @@ http
   .listen(process.env.PORT || 3000);
 
 // =====================
-// ANTI CRASH
+// ANTI-CRASH
 // =====================
 
 process.on("uncaughtException", err => {
