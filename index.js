@@ -1,6 +1,6 @@
-// -------------------------
-//  NANACHI — INDEX.JS (PARTE 1)
-// -------------------------
+// =====================
+// NANACHI BOT — PRO VERSION
+// =====================
 
 import {
   Client,
@@ -10,6 +10,7 @@ import {
   ActivityType
 } from "discord.js";
 
+import fetch from "node-fetch";
 import fs from "fs";
 import http from "http";
 
@@ -18,34 +19,33 @@ import http from "http";
 // =====================
 
 const TOKEN = process.env.TOKEN;
+const GEMINI_API = process.env.GEMINI_API;
 const OWNER_ID = "1427297946151551148";
 
 if (!TOKEN) {
-  console.error("❌ Falta TOKEN");
+  console.error("❌ Falta TOKEN de Discord");
   process.exit(1);
 }
 
+if (!GEMINI_API) {
+  console.error("❌ Falta GEMINI_API (Nanachi no tendrá energía)");
+}
+
 // =====================
-// HISTORIA NANACHI
+// PROMPT
 // =====================
 
 let NANACHI_PROMPT = "Eres Nanachi.";
 
 try {
-  NANACHI_PROMPT = fs.readFileSync("nanachi.txt", "utf8");
+  const file = fs.readFileSync("nanachi.txt", "utf8");
 
-  if (!NANACHI_PROMPT.trim()) {
-    throw new Error("Vacío");
+  if (file.trim()) {
+    NANACHI_PROMPT = file;
+    console.log("✅ Historia cargada");
   }
-
-  console.log("✅ Historia cargada");
-} catch (err) {
-  console.log("⚠️ Error cargando historia:", err.message);
-
-  NANACHI_PROMPT = `
-Eres Nanachi, sarcástica, tranquila y directa.
-Respondes de forma natural, corta y con personalidad.
-`;
+} catch {
+  console.log("⚠️ Usando prompt por defecto");
 }
 
 // =====================
@@ -62,70 +62,59 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
+// =====================
+// MEMORY SYSTEM
+// =====================
+
 const memory = new Map();
-const lastReply = new Map();
+const cooldown = new Map();
 
 // =====================
-// TEXTO
+// HELPERS
 // =====================
 
-function splitText(text, max = 1800) {
-  if (typeof text !== "string") return [];
-
-  const parts = [];
-  let current = "";
-
-  for (const line of text.split("\n")) {
-    if ((current + line).length > max) {
-      parts.push(current);
-      current = line + "\n";
-    } else {
-      current += line + "\n";
-    }
-  }
-
-  if (current.trim()) parts.push(current);
-
-  return parts;
-}
-
-function limitReply(text, max = 1800) {
-  if (typeof text !== "string") return "";
-  return text.length <= max ? text : text.slice(0, max);
-}
-
-function cleanReply(text) {
-  if (!text) return "";
+function clean(text = "") {
   return text
     .replace(/^\s*\.+\s*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
+function chunk(text, size = 1800) {
+  const parts = [];
+  for (let i = 0; i < text.length; i += size) {
+    parts.push(text.slice(i, i + size));
+  }
+  return parts;
+}
+
 // =====================
-// GEMINI AI (FINAL)
+// GEMINI REQUEST
 // =====================
 
-async function longcatAI(message, userId) {
-  const API = process.env.GEMINI_API;
-
-  if (!API) {
-    console.log("⚠️ FALTA GEMINI_API");
+async function askGemini(userId, message) {
+  if (!GEMINI_API) {
     return "Nanachi no tiene energía...";
   }
 
-  const history = memory.get(userId) ?? [];
+  const history = memory.get(userId) || [];
 
-  history.push({
-    role: "user",
-    content: message
-  });
+  const formattedHistory = history
+    .map(h => `${h.role === "user" ? "Usuario" : "Nanachi"}: ${h.content}`)
+    .join("\n");
+
+  const prompt = `
+${NANACHI_PROMPT}
+
+${formattedHistory}
+
+Usuario: ${message}
+Nanachi:
+`;
 
   try {
-    console.log("📡 Enviando a Gemini...");
-
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API}`,
       {
         method: "POST",
         headers: {
@@ -134,58 +123,60 @@ async function longcatAI(message, userId) {
         body: JSON.stringify({
           contents: [
             {
-              role: "user",
-              parts: [
-                {
-                  text: `${NANACHI_PROMPT}\n\nUsuario: ${message}`
-                }
-              ]
+              parts: [{ text: prompt }]
             }
           ]
         })
       }
     );
 
-    const data = await res.json();
+    const text = await res.text();
+
+    if (!res.ok) {
+      console.log("❌ GEMINI ERROR:", text);
+      return "Nanachi mira al vacío… algo salió mal.";
+    }
+
+    const data = JSON.parse(text);
 
     let reply =
       data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!reply) {
+      console.log("⚠️ Respuesta vacía:", text);
       return "Nanachi se queda pensando...";
     }
 
-    reply = cleanReply(limitReply(reply));
+    reply = clean(reply);
 
-    history.push({
-      role: "assistant",
-      content: reply
-    });
+    // Guardar memoria
+    history.push({ role: "user", content: message });
+    history.push({ role: "assistant", content: reply });
 
-    memory.set(userId, history.slice(-8));
+    memory.set(userId, history.slice(-10));
 
     return reply;
 
   } catch (err) {
-    console.log("❌ ERROR:", err);
+    console.log("💥 ERROR GEMINI:", err);
     return "Nanachi guarda silencio...";
   }
 }
 
-// -------------------------
-//  NANACHI — INDEX.JS (PARTE 2)
-// -------------------------
+// =====================
+// READY
+// =====================
 
-client.once(Events.ClientReady, async () => {
+client.once(Events.ClientReady, () => {
   console.log(`✅ Conectada como ${client.user.tag}`);
 
-  client.user.setActivity("Observando el Abismo…", {
+  client.user.setActivity("El Abismo...", {
     type: ActivityType.Playing
   });
 });
 
 // =====================
-// MENSAJES
+// MESSAGE HANDLER
 // =====================
 
 client.on(Events.MessageCreate, async message => {
@@ -193,32 +184,31 @@ client.on(Events.MessageCreate, async message => {
     if (message.author.bot) return;
 
     const isDM = !message.guild;
-    const call = /\b(nana|nanachi)\b/i;
+    const trigger = /\b(nana|nanachi)\b/i;
 
-    if (!isDM && !call.test(message.content)) return;
+    if (!isDM && !trigger.test(message.content)) return;
 
+    // Cooldown
     const now = Date.now();
-    const last = lastReply.get(message.author.id) ?? 0;
+    const last = cooldown.get(message.author.id) || 0;
 
-    if (now - last < 4000) return;
+    if (now - last < 3000) return;
 
-    lastReply.set(message.author.id, now);
+    cooldown.set(message.author.id, now);
 
     await message.channel.sendTyping();
 
-    const reply = await longcatAI(
-      message.content,
-      message.author.id
+    const reply = await askGemini(
+      message.author.id,
+      message.content
     );
 
-    if (!reply) return;
+    const parts = chunk(reply);
 
-    const chunks = splitText(reply);
+    await message.reply(parts[0]);
 
-    await message.reply(chunks.shift());
-
-    for (const chunk of chunks) {
-      await message.channel.send(chunk);
+    for (let i = 1; i < parts.length; i++) {
+      await message.channel.send(parts[i]);
     }
 
   } catch (err) {
@@ -227,20 +217,22 @@ client.on(Events.MessageCreate, async message => {
 });
 
 // =====================
-// WEB SERVICE
+// KEEP ALIVE (RENDER)
 // =====================
 
-http.createServer((_, res) => {
-  res.writeHead(200);
-  res.end("Nanachi vive...");
-}).listen(process.env.PORT || 3000);
+http
+  .createServer((req, res) => {
+    res.writeHead(200);
+    res.end("Nanachi vive 🐇");
+  })
+  .listen(process.env.PORT || 3000);
 
 // =====================
-// ANTI-CRASH
+// ANTI CRASH
 // =====================
 
 process.on("uncaughtException", err => {
-  console.log("💥 ERROR GLOBAL:", err);
+  console.log("💥 GLOBAL ERROR:", err);
 });
 
 process.on("unhandledRejection", err => {
