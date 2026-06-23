@@ -143,7 +143,7 @@ async function longcatAI(message, userId) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "gpt-3.5-turbo", // 🔥 CAMBIADO (más seguro)
+          model: "LongCat-2.0-Preview", // 🔥 CAMBIADO (más seguro)
           messages: [
             {
               role: "system",
@@ -194,7 +194,7 @@ async function longcatAI(message, userId) {
       console.log("❌ No se pudo enviar DM:", e);
     }
 
-    return "…Nanachi guarda silencio.";
+    return "…Nanachi guarda silencio.Error de longcat";
   }
 }
 
