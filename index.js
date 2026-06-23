@@ -103,99 +103,51 @@ function cleanReply(text) {
 }
 
 // =====================
-// LONGCAT AI (FINAL)
+// GEMINI AI (FINAL)
 // =====================
 
 async function longcatAI(message, userId) {
-  const API = process.env.LONGCAT_API;
+  const API = process.env.GEMINI_API;
 
   if (!API) {
-    console.log("⚠️ FALTA LONGCAT_API");
     return "Nanachi no tiene energía...";
   }
 
-  const history = memory.get(userId) ?? [];
-
-  history.push({
-    role: "user",
-    content: message
-  });
-
-  let timeout;
-
   try {
-    console.log("📡 Enviando a LongCat...");
-
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 15000);
-
     const res = await fetch(
-      "https://api.longcat.chat/openai/v1/chat/completions",
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API}`,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${API}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "LongCat-2.0-Preview",
-          messages: [
-            { role: "system", content: NANACHI_PROMPT },
-            ...history
-          ],
-          max_tokens: 1000,
-          temperature: 0.8
-        }),
-        signal: controller.signal
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `${NANACHI_PROMPT}\n\nUsuario: ${message}`
+                }
+              ]
+            }
+          ]
+        })
       }
     );
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.log("❌ ERROR HTTP:", res.status, errText);
-      return "Nanachi no pudo responder...";
-    }
+    const data = await res.json();
 
-    const text = await res.text();
-    console.log("📦 RAW:", text);
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return "Nanachi no entendió la respuesta...";
-    }
-
-    let reply = data?.choices?.[0]?.message?.content;
-
-    if (!reply) {
-      return "Nanachi se queda pensando...";
-    }
-
-    reply = cleanReply(limitReply(reply));
-
-    history.push({
-      role: "assistant",
-      content: reply
-    });
-
-    memory.set(userId, history.slice(-8));
-
-    return reply;
+    return (
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Nanachi guarda silencio..."
+    );
 
   } catch (err) {
-    console.log("❌ ERROR:", err);
-
-    if (err.name === "AbortError") {
-      return "Nanachi se distrajo...";
-    }
-
+    console.log(err);
     return "Nanachi guarda silencio...";
-  } finally {
-    clearTimeout(timeout);
   }
- }
+}
 
 // -------------------------
 //  NANACHI — INDEX.JS (PARTE 2)
