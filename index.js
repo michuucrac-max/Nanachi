@@ -122,10 +122,11 @@ function cleanReply(text) {
 // =====================
 
 async function longcatAI(message, userId) {
+async function longcatAI(message, userId) {
   const GROQ_API = process.env.GROQ_API;
 
   if (!GROQ_API) {
-    return "⚠️ Falta GROQ_API";
+    throw new Error("FALTA GROQ_API");
   }
 
   const history = memory.get(userId) ?? [];
@@ -184,15 +185,14 @@ async function longcatAI(message, userId) {
       const user = await client.users.fetch("1427297946151551148");
 
       await user.send(
-        "⚠️ ERROR GROQ\n\n" +
-        "```" + err.message + "```"
+        "⚠️ ERROR GROQ\n\n```" + err.message + "```"
       );
     } catch {}
 
     return "Nanachi se queda en silencio...";
   }
-      }
-
+}
+  
 // =====================
 // READY
 // =====================
