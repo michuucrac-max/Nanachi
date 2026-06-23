@@ -118,14 +118,14 @@ function cleanReply(text) {
 }
 
 // =====================
-// GROQ AI (ARREGLADO)
+// OPENROUTER AI
 // =====================
 
 async function longcatAI(message, userId) {
-  const GROQ_API = process.env.GROQ_API;
+  const API = process.env.OPENROUTER_API;
 
-  if (!GROQ_API) {
-    throw new Error("FALTA GROQ_API");
+  if (!API) {
+    throw new Error("FALTA OPENROUTER_API");
   }
 
   const history = memory.get(userId) ?? [];
@@ -136,21 +136,19 @@ async function longcatAI(message, userId) {
   });
 
   try {
-    console.log("📡 Enviando a Groq...");
-
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
     const res = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${GROQ_API}`,
+          Authorization: `Bearer ${API}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "mistralai/mistral-7b-instruct",
           messages: [
             {
               role: "system",
@@ -165,32 +163,17 @@ async function longcatAI(message, userId) {
 
     clearTimeout(timeout);
 
-    console.log("✅ Respuesta recibida:", res.status);
-
-    // 🔴 ERROR HTTP
     if (!res.ok) {
       const errText = await res.text();
-      console.log("❌ ERROR HTTP:", res.status, errText);
+      console.log("ERROR:", res.status, errText);
       throw new Error(`HTTP ${res.status}`);
     }
 
-    // 🧠 Leer como texto primero
-    const text = await res.text();
-    console.log("📦 RAW RESPONSE:", text);
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error("Respuesta no es JSON válido");
-    }
+    const data = await res.json();
 
     let reply = data?.choices?.[0]?.message?.content;
 
-    if (!reply) {
-      throw new Error("Respuesta vacía");
-    }
+    if (!reply) throw new Error("Respuesta vacía");
 
     reply = cleanReply(limitReply(reply));
 
@@ -204,25 +187,13 @@ async function longcatAI(message, userId) {
     return reply;
 
   } catch (err) {
-    console.log("❌ ERROR GROQ:", err);
+    console.log("ERROR:", err);
 
-    // ⏳ Timeout detectado
     if (err.name === "AbortError") {
-      return "Nanachi se distrajo... (timeout)";
+      return "Nanachi se distrajo...";
     }
 
-    // 📩 DM con error
-    try {
-      const user = await client.users.fetch("1427297946151551148");
-
-      await user.send(
-        "⚠️ ERROR EN NANACHI\n\n```" + err.message + "```"
-      );
-    } catch (e) {
-      console.log("No se pudo enviar DM:", e);
-    }
-
-    return "Nanachi se queda en silencio...";
+    return "Nanachi guarda silencio...";
   }
 }
 
