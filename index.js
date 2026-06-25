@@ -21,7 +21,7 @@ import fs from "fs";
 
 const TOKEN = process.env.TOKEN;
 const OWNER_ID = process.env.OWNER_ID;
-const GEMINI_API = process.env.GEMINI_API;
+const GROQ_API = process.env.GROQ_API;
 
 if (!TOKEN) {
   console.error("❌ Falta TOKEN");
@@ -30,6 +30,11 @@ if (!TOKEN) {
 
 if (!OWNER_ID) {
   console.error("❌ Falta OWNER_ID");
+  process.exit(1);
+}
+
+if (!GROQ_API) {
+  console.error("❌ Falta GROQ_API");
   process.exit(1);
 }
 
@@ -74,16 +79,20 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
   ],
-  partials: [Partials.Channel]
+  partials: [
+    Partials.Channel
+  ]
 });
 
 // =====================
 // MEMORIA
 // =====================
 
-const activeChats = new Map();
+const activeChats =
+  new Map();
 
-const memories = new Map();
+const memories =
+  new Map();
 
 function addMemory(
   userId,
@@ -146,97 +155,87 @@ const statuses = [
 
   "n!help",
 
-  "Hablando con Cave Raiders",
-
   "Buscando tesoros",
+
+  "Hablando con Cave Raiders",
 
   "Estudiando artefactos"
 
 ];
 
 // =====================
-// GEMINI
+// GROQ
 // =====================
 
-async function askGemini(
+async function askGroq(
   userId,
   message
 ) {
 
-  if (!GEMINI_API) {
-    throw new Error(
-      "GEMINI_API no configurada"
-    );
-  }
-
   const historyText =
     buildHistory(userId);
 
-  const prompt = `
-${NANACHI_PROMPT}
+  const res =
+    await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
 
-Historial:
-${historyText}
+        headers: {
+          "Content-Type":
+            "application/json",
 
-Usuario: ${message}
+          Authorization:
+            `Bearer ${GROQ_API}`
+        },
 
-Nanachi:
-`;
+        body: JSON.stringify({
+          model:
+            "openai/gpt-oss-120b",
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json"
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
-        ]
-      })
-    }
-  );
+          messages: [
 
-  const raw =
-    await res.text();
+            {
+              role: "system",
+              content:
+                NANACHI_PROMPT
+            },
 
-  console.log(
-    "📡 GEMINI STATUS:",
-    res.status
-  );
+            {
+              role: "user",
+              content:
+                `${historyText}\n\nUsuario: ${message}`
+            }
 
-  // Cuota agotada
-  if (res.status === 429) {
-    return null;
-  }
+          ],
+
+          temperature: 0.9,
+          max_tokens: 350
+        })
+      }
+    );
+
+  const data =
+    await res.json();
 
   if (!res.ok) {
 
+    console.log(data);
+
     throw new Error(
-      raw.slice(0, 1000)
+      data?.error?.message ||
+      "Error Groq"
     );
   }
 
-  const data =
-    JSON.parse(raw);
-
   const reply =
-    data?.candidates?.[0]
-      ?.content?.parts?.[0]
-      ?.text;
+    data?.choices?.[0]
+      ?.message?.content;
 
   if (!reply) {
 
     throw new Error(
-      "Gemini respondió vacío"
+      "Respuesta vacía"
     );
   }
 
@@ -348,64 +347,44 @@ client.on(
             OWNER_ID
           );
 
-        // Copia al DM
+        // =====================
+        // COPIA AL DM
+        // =====================
 
         try {
 
           await owner.send(
-            `📩 Conversación\n\n` +
+            `📩 MENSAJE PARA NANACHI\n\n` +
             `👤 Usuario: ${message.author.tag}\n` +
             `🆔 ID: ${message.author.id}\n` +
             `🏠 Servidor: ${message.guild.name}\n` +
             `💬 Canal: #${message.channel.name}\n\n` +
-            `📨 Mensaje:\n${message.content}`
+            `📨 Mensaje:\n${message.content}\n\n` +
+            `👉 Responde con:\n` +
+            `n!write ${message.author.id} tu mensaje`
           );
 
-        } catch (
-          dmError
-        ) {
+        } catch (err) {
 
           console.log(
-            "⚠️ No pude enviar DM:",
-            dmError.message
+            "⚠️ Error DM:",
+            err.message
           );
         }
 
         await message.channel.sendTyping();
 
+        // =====================
+        // IA
+        // =====================
+
         try {
 
           const reply =
-            await askGemini(
+            await askGroq(
               message.author.id,
               message.content
             );
-
-          // Gemini sin cuota
-
-          if (
-            reply === null
-          ) {
-
-            try {
-
-              await owner.send(
-                `⚠️ Gemini sin cuota.\n\n` +
-                `👤 ${message.author.tag}\n` +
-                `🆔 ${message.author.id}\n\n` +
-                `${message.content}`
-              );
-
-            } catch {}
-
-            await message.reply(
-              "Nanachi está algo cansada ahora mismo..."
-            );
-
-            return;
-          }
-
-          // Limitar respuesta
 
           const safeReply =
             reply.length > 1900
@@ -421,23 +400,28 @@ client.on(
 
         } catch (err) {
 
-          console.error(
-            "❌ GEMINI ERROR:",
+          console.log(
+            "❌ GROQ ERROR:",
             err
           );
 
-          const errorText =
-            String(
-              err.message
-            ).slice(
-              0,
-              1000
-            );
-
           try {
 
+            const owner =
+              await client.users.fetch(
+                OWNER_ID
+              );
+
+            const shortError =
+              String(
+                err.message
+              ).slice(
+                0,
+                1000
+              );
+
             await owner.send(
-              `⚠️ Error Gemini\n\n${errorText}`
+              `⚠️ Error Groq\n\n${shortError}`
             );
 
           } catch {}
@@ -455,11 +439,14 @@ client.on(
       if (
         isDM &&
         message.author.id ===
-          OWNER_ID &&
-        message.content.startsWith(
-          "n!write"
-        )
+          OWNER_ID
       ) {
+
+        if (
+          !message.content.startsWith(
+            "n!write"
+          )
+        ) return;
 
         const args =
           message.content.split(
@@ -471,7 +458,7 @@ client.on(
         ) {
 
           return message.reply(
-            "Uso: n!write userID mensaje"
+            "Uso:\nn!write userID mensaje"
           );
         }
 
@@ -491,7 +478,7 @@ client.on(
         if (!chat) {
 
           return message.reply(
-            "❌ No hay conversación activa con ese usuario."
+            "❌ No existe una conversación activa con ese usuario."
           );
         }
 
@@ -502,9 +489,7 @@ client.on(
               chat.channelId
             );
 
-          if (
-            !channel
-          ) {
+          if (!channel) {
 
             return message.reply(
               "❌ Canal no encontrado."
@@ -522,16 +507,14 @@ client.on(
           );
 
           await message.reply(
-            "✅ Respuesta enviada."
+            "✅ Mensaje enviado."
           );
 
-        } catch (
-          sendError
-        ) {
+        } catch (err) {
 
-          console.error(
-            "❌ ERROR N!WRITE:",
-            sendError
+          console.log(
+            "❌ ERROR WRITE:",
+            err
           );
 
           await message.reply(
@@ -542,7 +525,7 @@ client.on(
 
     } catch (err) {
 
-      console.error(
+      console.log(
         "💥 ERROR GENERAL:",
         err
       );
@@ -561,7 +544,7 @@ http
       res.writeHead(200);
 
       res.end(
-        "Nanachi viva 🐇"
+        "Nanachi vive 🐇"
       );
     }
   )
@@ -578,7 +561,7 @@ process.on(
   "uncaughtException",
   err => {
 
-    console.error(
+    console.log(
       "💥 ERROR GLOBAL:",
       err
     );
@@ -589,7 +572,7 @@ process.on(
   "unhandledRejection",
   err => {
 
-    console.error(
+    console.log(
       "💥 PROMISE ERROR:",
       err
     );
