@@ -18,33 +18,23 @@ const TOKEN = process.env.TOKEN;
 const OWNER_ID = process.env.OWNER_ID;
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY;
 
-if (!TOKEN) {
-  console.error("❌ Falta TOKEN");
-  process.exit(1);
-}
-
-if (!OWNER_ID) {
-  console.error("❌ Falta OWNER_ID");
-  process.exit(1);
-}
-
-if (!CEREBRAS_API_KEY) {
-  console.error("❌ Falta CEREBRAS_API_KEY");
+if (!TOKEN || !OWNER_ID || !CEREBRAS_API_KEY) {
+  console.error("❌ Faltan variables de entorno");
   process.exit(1);
 }
 
 // =====================
-// NANACHI PROMPT
+// PROMPT
 // =====================
 
-let NANACHI_PROMPT = `Eres Nanachi.`;
+let NANACHI_PROMPT = "Eres Nanachi.";
 
 try {
   const txt = fs.readFileSync("nanachi.txt", "utf8");
   if (txt.trim()) NANACHI_PROMPT = txt;
-  console.log("✅ nanachi.txt cargado");
+  console.log("✅ Prompt cargado");
 } catch {
-  console.log("⚠️ nanachi.txt no encontrado");
+  console.log("⚠️ Usando prompt por defecto");
 }
 
 // =====================
@@ -62,32 +52,25 @@ const client = new Client({
 });
 
 // =====================
-// MEMORIA
+// MEMORIA ULTRA OPTIMIZADA
 // =====================
 
-const activeChats = new Map();
 const memories = new Map();
 
+const MAX_MEMORY = 8;
+
 function addMemory(userId, role, content) {
+  if (!content || content.length < 2) return;
+
   const history = memories.get(userId) || [];
 
   history.push({ role, content });
 
-  while (history.length > 20) {
+  while (history.length > MAX_MEMORY) {
     history.shift();
   }
 
   memories.set(userId, history);
-}
-
-function buildHistory(userId) {
-  const history = memories.get(userId) || [];
-
-  return history
-    .map(e =>
-      `${e.role === "user" ? "Usuario" : "Nanachi"}: ${e.content}`
-    )
-    .join("\n");
 }
 
 // =====================
@@ -99,19 +82,27 @@ const statuses = [
   "Observando reliquias",
   "Pensando en Mitty",
   "Ayudando a Reg",
-  "n!help",
   "Buscando tesoros",
-  "Hablando con Cave Raiders",
   "Estudiando artefactos"
 ];
 
 // =====================
-// IA (CEREBRAS - FETCH DIRECTO)
+// LOGS LIMPIOS
+// =====================
+
+function log(type, msg) {
+  const time = new Date().toLocaleTimeString();
+  console.log(`[${time}] ${type} → ${msg}`);
+}
+
+// =====================
+// IA OPTIMIZADA (MENOS TOKENS)
 // =====================
 
 async function askCerebras(userId, message) {
+  const history = memories.get(userId) || [];
 
-  const historyText = buildHistory(userId);
+  const trimmed = history.slice(-6); // 🔥 aún más eficiente
 
   const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
     method: "POST",
@@ -123,34 +114,26 @@ async function askCerebras(userId, message) {
       model: "gpt-oss-120b",
 
       messages: [
-        {
-          role: "system",
-          content: NANACHI_PROMPT
-        },
-        {
-          role: "user",
-          content: `${historyText}\n\nUsuario: ${message}`
-        }
+        { role: "system", content: NANACHI_PROMPT },
+        ...trimmed,
+        { role: "user", content: message }
       ],
 
-      max_tokens: 350,
-      temperature: 0.9,
-      top_p: 1
+      max_tokens: 200,
+      temperature: 0.8
     })
   });
 
   const data = await response.json();
 
   if (!response.ok) {
-    console.log(data);
-    throw new Error(data?.error?.message || "Error Cerebras");
+    log("ERROR IA", JSON.stringify(data).slice(0, 200));
+    throw new Error("Cerebras error");
   }
 
   const reply = data?.choices?.[0]?.message?.content;
 
-  if (!reply) {
-    throw new Error("Respuesta vacía Cerebras");
-  }
+  if (!reply) throw new Error("Respuesta vacía IA");
 
   addMemory(userId, "user", message);
   addMemory(userId, "assistant", reply);
@@ -158,145 +141,100 @@ async function askCerebras(userId, message) {
   return reply;
 }
 
-
 // =====================
 // READY
 // =====================
 
 client.once(Events.ClientReady, () => {
+  log("BOT", `Conectado como ${client.user.tag}`);
 
-  console.log(`✅ Conectada como ${client.user.tag}`);
+  let i = 0;
 
-  let index = 0;
-
-  client.user.setActivity(statuses[0], {
-    type: ActivityType.Playing
-  });
+  client.user.setActivity(statuses[0], { type: ActivityType.Playing });
 
   setInterval(() => {
-    index = (index + 1) % statuses.length;
-
-    client.user.setActivity(statuses[index], {
-      type: ActivityType.Playing
-    });
+    i = (i + 1) % statuses.length;
+    client.user.setActivity(statuses[i], { type: ActivityType.Playing });
   }, 30000);
 });
 
 // =====================
-// MESSAGE HANDLER
+// MESSAGE HANDLER (SIN SPAM MD)
 // =====================
 
-client.on(Events.MessageCreate, async message => {
+client.on(Events.MessageCreate, async (message) => {
   try {
-
     if (message.author.bot) return;
 
     const isDM = !message.guild;
     const trigger = /\b(nana|nanachi)\b/i;
 
     // =====================
-    // MENSAJES SERVIDOR
+    // SERVIDOR
     // =====================
 
     if (!isDM && trigger.test(message.content)) {
-
-      activeChats.set(message.author.id, {
-        channelId: message.channel.id,
-        guildId: message.guild.id
-      });
-
-      const owner = await client.users.fetch(OWNER_ID);
-
-      try {
-        await owner.send(
-          `📩 MENSAJE PARA NANACHI\n\n` +
-          `👤 Usuario: ${message.author.tag}\n` +
-          `🆔 ID: ${message.author.id}\n` +
-          `🏠 Servidor: ${message.guild.name}\n` +
-          `💬 Canal: #${message.channel.name}\n\n` +
-          `📨 Mensaje:\n${message.content}\n\n` +
-          `👉 Responde con:\n` +
-          `n!write ${message.author.id} tu mensaje`
-        );
-      } catch (err) {
-        console.log("⚠️ Error DM:", err.message);
-      }
+      log("TRIGGER", `${message.author.tag} → ${message.content}`);
 
       await message.channel.sendTyping();
 
       try {
-
         const reply = await askCerebras(
           message.author.id,
           message.content
         );
 
-        const safeReply =
-          reply.length > 1900 ? reply.slice(0, 1900) : reply;
-
-        await message.reply(safeReply);
+        await message.reply(
+          reply.length > 1900 ? reply.slice(0, 1900) : reply
+        );
 
       } catch (err) {
-
-        console.log("❌ IA ERROR:", err);
-
-        try {
-          const owner = await client.users.fetch(OWNER_ID);
-
-          await owner.send(
-            `⚠️ Error IA\n\n${String(err.message).slice(0, 1000)}`
-          );
-        } catch {}
-
-        await message.reply("Nanachi se quedó pensando...");
+        log("IA ERROR", err.message);
+        await message.reply("Nanachi está pensando...");
       }
     }
 
     // =====================
-    // N!WRITE (OWNER DM)
+    // OWNER DM CONTROL (solo logs, sin spam)
     // =====================
 
     if (isDM && message.author.id === OWNER_ID) {
-
       if (!message.content.startsWith("n!write")) return;
 
       const args = message.content.split(" ");
-
       if (args.length < 3) {
-        return message.reply("Uso:\nn!write userID mensaje");
+        return message.reply("Uso: n!write userId mensaje");
       }
 
       const userId = args[1];
       const text = args.slice(2).join(" ");
 
-      const chat = activeChats.get(userId);
-
-      if (!chat) {
-        return message.reply("❌ No hay chat activo con ese usuario.");
-      }
+      const channelData = [...client.channels.cache.values()]
+        .find(c => c?.guild && c.isTextBased?.());
 
       try {
+        const channel = await client.channels.fetch(
+          channelData?.id
+        );
 
-        const channel = await client.channels.fetch(chat.channelId);
-
-        if (!channel) {
-          return message.reply("❌ Canal no encontrado.");
-        }
+        if (!channel) return message.reply("❌ Canal no encontrado");
 
         await channel.send(text);
 
         addMemory(userId, "assistant", text);
 
-        await message.reply("✅ Mensaje enviado.");
+        log("WRITE", `Mensaje enviado a ${userId}`);
+
+        await message.reply("✅ Enviado");
 
       } catch (err) {
-        console.log("❌ WRITE ERROR:", err);
-        await message.reply("❌ Error enviando mensaje.");
+        log("WRITE ERROR", err.message);
+        await message.reply("❌ Error enviando mensaje");
       }
     }
 
   } catch (err) {
-    console.log("💥 ERROR GENERAL:", err);
+    log("FATAL", err.message);
   }
 });
 
@@ -306,19 +244,19 @@ client.on(Events.MessageCreate, async message => {
 
 http.createServer((_, res) => {
   res.writeHead(200);
-  res.end("Nanachi vive 🐇");
+  res.end("Nanachi alive");
 }).listen(process.env.PORT || 3000);
 
 // =====================
-// ANTI CRASH
+// ERROR HANDLING
 // =====================
 
-process.on("uncaughtException", err => {
-  console.log("💥 ERROR GLOBAL:", err);
+process.on("uncaughtException", (err) => {
+  log("CRASH", err.message);
 });
 
-process.on("unhandledRejection", err => {
-  console.log("💥 PROMISE ERROR:", err);
+process.on("unhandledRejection", (err) => {
+  log("PROMISE", err.message);
 });
 
 // =====================
