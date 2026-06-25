@@ -1,5 +1,6 @@
 // =====================
 // NANACHI AI BOT
+// PARTE 1
 // =====================
 
 import {
@@ -37,7 +38,6 @@ const client = new Client({
 });
 
 const activeChats = new Map();
-
 const memories = new Map();
 
 function addMemory(userId, role, content) {
@@ -48,7 +48,7 @@ function addMemory(userId, role, content) {
     content
   });
 
-  if (history.length > 20) {
+  while (history.length > 20) {
     history.shift();
   }
 
@@ -59,13 +59,17 @@ function buildHistory(userId) {
   const history = memories.get(userId) || [];
 
   return history
-    .map(x =>
-      `${x.role === "user" ? "Usuario" : "Nanachi"}: ${x.content}`
+    .map(entry =>
+      `${entry.role === "user" ? "Usuario" : "Nanachi"}: ${entry.content}`
     )
     .join("\n");
 }
 
 async function askGemini(userId, message) {
+
+  if (!GEMINI_API) {
+    throw new Error("GEMINI_API no configurada");
+  }
 
   const historyText = buildHistory(userId);
 
@@ -76,8 +80,8 @@ Personalidad:
 - Inteligente
 - Sarcástica
 - Tranquila
-- Amable con amigos
-- Respuestas naturales
+- Natural
+- No repites frases
 
 Historial:
 ${historyText}
@@ -107,15 +111,21 @@ Nanachi:
     }
   );
 
-  const text = await res.text();
+  const raw = await res.text();
 
-  console.log("📡 Gemini:", res.status);
+  console.log("📡 GEMINI STATUS:", res.status);
 
-  if (!res.ok) {
-    throw new Error(text);
+  if (res.status === 429) {
+    return null;
   }
 
-  const data = JSON.parse(text);
+  if (!res.ok) {
+    throw new Error(
+      raw.slice(0, 1000)
+    );
+  }
+
+  const data = JSON.parse(raw);
 
   const reply =
     data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -131,7 +141,9 @@ Nanachi:
 }
 
 client.once(Events.ClientReady, () => {
-  console.log(`✅ Conectada como ${client.user.tag}`);
+  console.log(
+    `✅ Conectada como ${client.user.tag}`
+  );
 });
 
 // =====================
@@ -147,7 +159,8 @@ client.on(Events.MessageCreate, async message => {
 
     const isDM = !message.guild;
 
-    const trigger = /\b(nana|nanachi)\b/i;
+    const trigger =
+      /\b(nana|nanachi)\b/i;
 
     // =====================
     // MENSAJES DEL SERVIDOR
@@ -155,48 +168,68 @@ client.on(Events.MessageCreate, async message => {
 
     if (!isDM && trigger.test(message.content)) {
 
-      activeChats.set(message.author.id, {
-        channelId: message.channel.id,
-        guildId: message.guild.id
-      });
+      activeChats.set(
+        message.author.id,
+        {
+          channelId: message.channel.id,
+          guildId: message.guild.id
+        }
+      );
+
+      const owner =
+        await client.users.fetch(
+          OWNER_ID
+        );
+
+      // Siempre copia al DM
+      await owner.send(
+        `📩 Conversación\n\n` +
+        `👤 ${message.author.tag}\n` +
+        `🆔 ${message.author.id}\n` +
+        `💬 ${message.content}`
+      );
 
       await message.channel.sendTyping();
 
       try {
 
-        const reply = await askGemini(
-          message.author.id,
-          message.content
-        );
+        const reply =
+          await askGemini(
+            message.author.id,
+            message.content
+          );
+
+        // Cuota agotada
+        if (reply === null) {
+
+          await owner.send(
+            `⚠️ Gemini sin cuota.\n\n` +
+            `Usuario: ${message.author.tag}\n` +
+            `ID: ${message.author.id}`
+          );
+
+          await message.reply(
+            "Nanachi está ocupada ahora mismo..."
+          );
+
+          return;
+        }
 
         await message.reply(reply);
 
-        const owner = await client.users.fetch(
-          OWNER_ID
-        );
-
-        await owner.send(
-          `📩 Conversación\n\n` +
-          `👤 ${message.author.tag}\n` +
-          `🆔 ${message.author.id}\n` +
-          `💬 ${message.content}\n\n` +
-          `🤖 ${reply}`
-        );
-
       } catch (err) {
 
-        console.log("❌ GEMINI:", err);
-
-        const owner = await client.users.fetch(
-          OWNER_ID
+        console.error(
+          "❌ GEMINI ERROR:",
+          err
         );
 
+        const errorText =
+          String(err.message)
+            .slice(0, 1000);
+
         await owner.send(
-          `⚠️ Error Gemini\n\n` +
-          `Usuario: ${message.author.tag}\n` +
-          `ID: ${message.author.id}\n\n` +
-          `${message.content}\n\n` +
-          `${err.message}`
+          `⚠️ Error Gemini\n\n${errorText}`
         );
 
         await message.reply(
@@ -206,16 +239,19 @@ client.on(Events.MessageCreate, async message => {
     }
 
     // =====================
-    // COMANDO MANUAL
+    // RESPUESTA MANUAL
     // =====================
 
     if (
       isDM &&
       message.author.id === OWNER_ID &&
-      message.content.startsWith("n!write")
+      message.content.startsWith(
+        "n!write"
+      )
     ) {
 
-      const args = message.content.split(" ");
+      const args =
+        message.content.split(" ");
 
       if (args.length < 3) {
         return message.reply(
@@ -225,21 +261,26 @@ client.on(Events.MessageCreate, async message => {
 
       const userId = args[1];
 
-      const text = args.slice(2).join(" ");
+      const text =
+        args.slice(2).join(" ");
 
-      const chat = activeChats.get(userId);
+      const chat =
+        activeChats.get(userId);
 
       if (!chat) {
+
         return message.reply(
           "❌ Conversación no encontrada"
         );
       }
 
-      const channel = await client.channels.fetch(
-        chat.channelId
-      );
+      const channel =
+        await client.channels.fetch(
+          chat.channelId
+        );
 
       if (!channel) {
+
         return message.reply(
           "❌ Canal no encontrado"
         );
@@ -247,7 +288,11 @@ client.on(Events.MessageCreate, async message => {
 
       await channel.send(text);
 
-      addMemory(userId, "assistant", text);
+      addMemory(
+        userId,
+        "assistant",
+        text
+      );
 
       await message.reply(
         "✅ Mensaje enviado"
@@ -256,7 +301,7 @@ client.on(Events.MessageCreate, async message => {
 
   } catch (err) {
 
-    console.log(
+    console.error(
       "💥 ERROR GENERAL:",
       err
     );
@@ -272,7 +317,9 @@ http
     res.writeHead(200);
     res.end("Nanachi viva");
   })
-  .listen(process.env.PORT || 3000);
+  .listen(
+    process.env.PORT || 3000
+  );
 
 // =====================
 // LOGIN
