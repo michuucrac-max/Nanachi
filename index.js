@@ -164,92 +164,64 @@ const statuses = [
 ];
 
 // =====================
-// GROQ
+// CEREBRAS AI
 // =====================
 
-async function askGroq(
-  userId,
-  message
-) {
+import { Cerebras } from "cerebras-cloud-sdk";
 
-  const historyText =
-    buildHistory(userId);
+// =====================
+// ENV CEREBRAS
+// =====================
 
-  const res =
-    await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
+const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY;
+
+if (!CEREBRAS_API_KEY) {
+  console.error("❌ Falta CEREBRAS_API_KEY");
+  process.exit(1);
+}
+
+const cerebras = new Cerebras({
+  apiKey: CEREBRAS_API_KEY
+});
+
+// =====================
+// IA FUNCTION
+// =====================
+
+async function askCerebras(userId, message) {
+
+  const historyText = buildHistory(userId);
+
+  const completion = await cerebras.chat.completions.create({
+    model: "gpt-oss-120b",
+
+    messages: [
       {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          Authorization:
-            `Bearer ${GROQ_API}`
-        },
-
-        body: JSON.stringify({
-          model:
-            "openai/gpt-oss-120b",
-
-          messages: [
-
-            {
-              role: "system",
-              content:
-                NANACHI_PROMPT
-            },
-
-            {
-              role: "user",
-              content:
-                `${historyText}\n\nUsuario: ${message}`
-            }
-
-          ],
-
-          temperature: 0.9,
-          max_tokens: 350
-        })
+        role: "system",
+        content: NANACHI_PROMPT
+      },
+      {
+        role: "user",
+        content: `${historyText}\n\nUsuario: ${message}`
       }
-    );
+    ],
 
-  const data =
-    await res.json();
+    max_completion_tokens: 350,
+    temperature: 0.9,
+    top_p: 1,
+    stream: false,
+    reasoning_effort: "medium"
+  });
 
-  if (!res.ok) {
-
-    console.log(data);
-
-    throw new Error(
-      data?.error?.message ||
-      "Error Groq"
-    );
-  }
-
-  const reply =
-    data?.choices?.[0]
-      ?.message?.content;
+  const reply = completion?.choices?.[0]?.message?.content;
 
   if (!reply) {
-
-    throw new Error(
-      "Respuesta vacía"
-    );
+    throw new Error("Respuesta vacía Cerebras");
   }
 
-  addMemory(
-    userId,
-    "user",
-    message
-  );
-
-  addMemory(
-    userId,
-    "assistant",
-    reply
-  );
+  // MEMORIA
+  addMemory(userId, "user", message);
+  addMemory(userId, "assistant", reply);
 
   return reply;
 }
