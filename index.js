@@ -34,7 +34,7 @@ try {
   if (txt.trim()) NANACHI_PROMPT = txt;
   console.log("✅ Prompt cargado");
 } catch {
-  console.log("⚠️ Usando prompt por defecto");
+  console.log("⚠️ Prompt por defecto");
 }
 
 // =====================
@@ -52,11 +52,10 @@ const client = new Client({
 });
 
 // =====================
-// MEMORIA ULTRA OPTIMIZADA
+// MEMORIA OPTIMIZADA
 // =====================
 
 const memories = new Map();
-
 const MAX_MEMORY = 8;
 
 function addMemory(userId, role, content) {
@@ -87,22 +86,29 @@ const statuses = [
 ];
 
 // =====================
-// LOGS LIMPIOS
+// LOG LIMPIO
 // =====================
 
 function log(type, msg) {
-  const time = new Date().toLocaleTimeString();
-  console.log(`[${time}] ${type} → ${msg}`);
+  console.log(`[${new Date().toLocaleTimeString()}] ${type} → ${msg}`);
 }
 
 // =====================
-// IA OPTIMIZADA (MENOS TOKENS)
+// IA OPTIMIZADA (BALANCE COSTO + CALIDAD)
 // =====================
 
 async function askCerebras(userId, message) {
   const history = memories.get(userId) || [];
+  const trimmed = history.slice(-6);
 
-  const trimmed = history.slice(-6); // 🔥 aún más eficiente
+  // 🔥 TOKENS DINÁMICOS (CLAVE)
+  const len = message.length;
+
+  let max_tokens = 250;
+
+  if (len > 60) max_tokens = 300;
+  if (len > 120) max_tokens = 400;
+  if (len > 200) max_tokens = 500;
 
   const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
     method: "POST",
@@ -119,7 +125,7 @@ async function askCerebras(userId, message) {
         { role: "user", content: message }
       ],
 
-      max_tokens: 200,
+      max_tokens,
       temperature: 0.8
     })
   });
@@ -128,12 +134,12 @@ async function askCerebras(userId, message) {
 
   if (!response.ok) {
     log("ERROR IA", JSON.stringify(data).slice(0, 200));
-    throw new Error("Cerebras error");
+    throw new Error("Error Cerebras");
   }
 
   const reply = data?.choices?.[0]?.message?.content;
 
-  if (!reply) throw new Error("Respuesta vacía IA");
+  if (!reply) throw new Error("Respuesta vacía");
 
   addMemory(userId, "user", message);
   addMemory(userId, "assistant", reply);
@@ -150,16 +156,21 @@ client.once(Events.ClientReady, () => {
 
   let i = 0;
 
-  client.user.setActivity(statuses[0], { type: ActivityType.Playing });
+  client.user.setActivity(statuses[0], {
+    type: ActivityType.Playing
+  });
 
   setInterval(() => {
     i = (i + 1) % statuses.length;
-    client.user.setActivity(statuses[i], { type: ActivityType.Playing });
+
+    client.user.setActivity(statuses[i], {
+      type: ActivityType.Playing
+    });
   }, 30000);
 });
 
 // =====================
-// MESSAGE HANDLER (SIN SPAM MD)
+// MESSAGE HANDLER
 // =====================
 
 client.on(Events.MessageCreate, async (message) => {
@@ -174,7 +185,7 @@ client.on(Events.MessageCreate, async (message) => {
     // =====================
 
     if (!isDM && trigger.test(message.content)) {
-      log("TRIGGER", `${message.author.tag} → ${message.content}`);
+      log("TRIGGER", `${message.author.tag}`);
 
       await message.channel.sendTyping();
 
@@ -195,7 +206,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
 
     // =====================
-    // OWNER DM CONTROL (solo logs, sin spam)
+    // OWNER CONTROL (SIN SPAM MD)
     // =====================
 
     if (isDM && message.author.id === OWNER_ID) {
@@ -209,15 +220,8 @@ client.on(Events.MessageCreate, async (message) => {
       const userId = args[1];
       const text = args.slice(2).join(" ");
 
-      const channelData = [...client.channels.cache.values()]
-        .find(c => c?.guild && c.isTextBased?.());
-
       try {
-        const channel = await client.channels.fetch(
-          channelData?.id
-        );
-
-        if (!channel) return message.reply("❌ Canal no encontrado");
+        const channel = message.channel;
 
         await channel.send(text);
 
@@ -229,7 +233,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       } catch (err) {
         log("WRITE ERROR", err.message);
-        await message.reply("❌ Error enviando mensaje");
+        await message.reply("❌ Error");
       }
     }
 
@@ -248,7 +252,7 @@ http.createServer((_, res) => {
 }).listen(process.env.PORT || 3000);
 
 // =====================
-// ERROR HANDLING
+// ERRORS
 // =====================
 
 process.on("uncaughtException", (err) => {
