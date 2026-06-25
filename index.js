@@ -86,7 +86,7 @@ const statuses = [
   "nnaaa",
   "cuanto extraño a mi familia",
   "el abismo no perdona las malas desiciones",
-  "cuanto odio a bondreowd"
+  "cuanto odio a bondreowd",
   "solo debo bajar mas",
   "familia...",
   "quisiera recuperar mi infancia",
