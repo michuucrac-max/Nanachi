@@ -82,7 +82,21 @@ const statuses = [
   "Pensando en Mitty",
   "Ayudando a Reg",
   "Buscando tesoros",
-  "Estudiando artefactos"
+  "Estudiando artefactos",
+  "nnaaa",
+  "cuanto extraño a mi familia",
+  "el abismo no perdona las malas desiciones",
+  "cuanto odio a bondreowd"
+  "solo debo bajar mas",
+  "familia...",
+  "quisiera recuperar mi infancia",
+  "no es ilegal?",
+  "¡oye que estas mirando!",
+  "los odio los odio los odio los odio los odio!",
+  "no soy un juguete",
+  "oh mitty...",
+  "chocolate?",
+  "adoro el chocolate!"
 ];
 
 // =====================
