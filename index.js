@@ -15,9 +15,9 @@ const DEFAULTS = {
         items: []
     },
 
-    "data/human_training.jsonl": "",
-    "data/ai_training.jsonl": "",
-    "data/corrections.jsonl": "",
+    "data/human_training.jsonl": "\n",
+    "data/ai_training.jsonl": "\n",
+    "data/corrections.jsonl": "\n",
 
     "data/training_history.json": {
         version: 1,
